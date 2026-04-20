@@ -6,6 +6,7 @@ from copy import deepcopy
 from typing import Any, Dict, List, Optional, Tuple
 
 from djgent.exceptions import ConfigurationError
+from djgent.runtime.human import sanitize_hitl_config
 from djgent.utils.helpers import merge_settings
 
 MIDDLEWARE_CLASS_MAP = {
@@ -101,10 +102,9 @@ def build_langchain_middleware(
 
     hitl_specs = _normalize_specs(resolved.get("human_in_the_loop"))
     if hitl_specs:
-        raise ConfigurationError(
-            "LANGCHAIN_MIDDLEWARE['human_in_the_loop'] is not wired into Djgent "
-            "yet because it requires an interrupt/resume flow migration."
-        )
+        middleware_class = _load_middleware_class("HumanInTheLoopMiddleware")
+        for spec in hitl_specs:
+            instances.append(middleware_class(**sanitize_hitl_config(spec)))
 
     for section, class_name in MIDDLEWARE_CLASS_MAP.items():
         specs = _normalize_specs(resolved.get(section))

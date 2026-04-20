@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 
-from .models import Conversation, Message
+from .models import Conversation, HumanInteractionRequest, Message
 
 
 @admin.register(Conversation)
@@ -116,3 +116,162 @@ class MessageAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         """Optimize queryset with select related."""
         return super().get_queryset(request).select_related('conversation')
+
+
+@admin.register(HumanInteractionRequest)
+class HumanInteractionRequestAdmin(admin.ModelAdmin):
+    """Admin queue for site-owner HITL approvals."""
+
+    list_display = [
+        "id",
+        "status",
+        "agent_name",
+        "thread_id",
+        "owner_email_preview",
+        "created_at",
+        "emailed_at",
+        "resumed_at",
+    ]
+    list_filter = ["status", "agent_name", "created_at", "emailed_at"]
+    search_fields = ["id", "agent_name", "thread_id", "site_owner_emails"]
+    readonly_fields = [
+        "id",
+        "agent_name",
+        "thread_id",
+        "conversation",
+        "requesting_user",
+        "site_owner_emails",
+        "action_requests",
+        "review_configs",
+        "output",
+        "error",
+        "notification_error",
+        "emailed_at",
+        "decided_at",
+        "resumed_at",
+        "created_at",
+        "updated_at",
+    ]
+    actions = ["approve_selected", "reject_selected", "resume_selected"]
+    date_hierarchy = "created_at"
+
+    fieldsets = (
+        (None, {"fields": ("id", "status", "agent_name", "thread_id")}),
+        (
+            "Review",
+            {
+                "fields": (
+                    "action_requests",
+                    "review_configs",
+                    "decisions",
+                    "site_owner_emails",
+                )
+            },
+        ),
+        (
+            "Context",
+            {
+                "fields": (
+                    "conversation",
+                    "requesting_user",
+                    "output",
+                    "error",
+                    "notification_error",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Timestamps",
+            {
+                "fields": (
+                    "emailed_at",
+                    "decided_at",
+                    "resumed_at",
+                    "created_at",
+                    "updated_at",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+    )
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("conversation", "requesting_user")
+        )
+
+    def owner_email_preview(self, obj):
+        return ", ".join(obj.site_owner_emails or [])[:80]
+
+    owner_email_preview.short_description = "Site owners"
+
+    @admin.action(description="Approve selected HITL requests")
+    def approve_selected(self, request, queryset):
+        from django.utils import timezone
+
+        count = 0
+        for item in queryset.filter(status=HumanInteractionRequest.STATUS_PENDING):
+            item.status = HumanInteractionRequest.STATUS_APPROVED
+            item.decisions = [
+                {"type": "approve"} for _ in (item.action_requests or [])
+            ]
+            item.decided_at = timezone.now()
+            item.save(update_fields=["status", "decisions", "decided_at", "updated_at"])
+            count += 1
+        self.message_user(request, f"Approved {count} request(s).")
+
+    @admin.action(description="Reject selected HITL requests")
+    def reject_selected(self, request, queryset):
+        from django.utils import timezone
+
+        count = 0
+        for item in queryset.filter(status=HumanInteractionRequest.STATUS_PENDING):
+            item.status = HumanInteractionRequest.STATUS_REJECTED
+            item.decisions = [
+                {"type": "reject", "message": "Rejected by site owner."}
+                for _ in (item.action_requests or [])
+            ]
+            item.decided_at = timezone.now()
+            item.save(update_fields=["status", "decisions", "decided_at", "updated_at"])
+            count += 1
+        self.message_user(request, f"Rejected {count} request(s).")
+
+    @admin.action(description="Resume selected HITL requests")
+    def resume_selected(self, request, queryset):
+        from djgent import Agent
+
+        resumed = 0
+        for item in queryset.filter(
+            status__in=[
+                HumanInteractionRequest.STATUS_PENDING,
+                HumanInteractionRequest.STATUS_APPROVED,
+                HumanInteractionRequest.STATUS_REJECTED,
+            ]
+        ):
+            try:
+                agent = Agent.create(
+                    name=item.agent_name,
+                    auto_load_tools=True,
+                    memory=True,
+                    memory_backend="database",
+                    conversation_id=(
+                        str(item.conversation_id)
+                        if item.conversation_id
+                        else None
+                    ),
+                    thread_id=item.thread_id,
+                )
+                agent.resume_human_interaction(
+                    item.id,
+                    decisions=item.decisions or None,
+                    reviewer=request.user,
+                )
+                resumed += 1
+            except Exception as exc:
+                item.status = HumanInteractionRequest.STATUS_FAILED
+                item.error = str(exc)
+                item.save(update_fields=["status", "error", "updated_at"])
+        self.message_user(request, f"Resumed {resumed} request(s).")

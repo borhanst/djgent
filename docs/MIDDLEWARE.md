@@ -197,6 +197,7 @@ Supported sections currently map to:
 - `tool_call_limit`
 - `tool_selector`
 - `context_editing`
+- `human_in_the_loop`
 
 Example:
 
@@ -216,7 +217,54 @@ Djgent merges `langchain_middleware` from:
 1. `DJGENT["LANGCHAIN_MIDDLEWARE"]` in Django settings
 2. per-agent `langchain_middleware` overrides
 
-If you configure `human_in_the_loop`, Djgent currently raises a configuration error because that flow is not wired into the runtime yet.
+### Human-In-The-Loop
+
+`human_in_the_loop` pauses configured LangChain tool calls before execution,
+stores the pending review in the database, saves LangGraph checkpoints with a
+Django-backed checkpointer, and emails configured site owners.
+
+```python
+DJGENT = {
+    "SITE_OWNER_EMAILS": ["owner@example.com"],
+    "LANGCHAIN_MIDDLEWARE": {
+        "human_in_the_loop": {
+            "enabled": True,
+            "interrupt_on": {
+                "delete_record": {
+                    "allowed_decisions": ["approve", "reject"],
+                    "description": "Deleting records requires owner approval.",
+                },
+                "send_email": {
+                    "allowed_decisions": ["approve", "edit", "reject"],
+                },
+            },
+            "description_prefix": "Tool execution pending site owner approval",
+            "notify_email": True,
+            "site_url": "https://example.com",
+        }
+    },
+}
+```
+
+Owner email recipients resolve in this order:
+
+1. `LANGCHAIN_MIDDLEWARE["human_in_the_loop"]["site_owner_emails"]`
+2. `DJGENT["SITE_OWNER_EMAILS"]`
+3. Django `ADMINS`
+
+Pending requests are available in Django admin under
+`Human interaction requests`. Site owners can approve, edit, or reject by
+setting decisions, then resume the thread:
+
+```python
+agent.resume_human_interaction(request_id)
+agent.resume_human_interaction(
+    request_id,
+    decisions=[{"type": "reject", "message": "Rewrite without deletion."}],
+)
+```
+
+When `decisions` is omitted, Djgent approves each pending action as-is.
 
 ## Tips
 

@@ -165,6 +165,35 @@ def check_djent_installed_packages(app_configs, **kwargs) -> List[Warning]:
 
 
 @register()
+def check_djent_hitl_config(app_configs, **kwargs) -> List[Warning]:
+    """Check human-in-the-loop notification settings."""
+    warnings = []
+    djgent_settings = getattr(settings, "DJGENT", {}) or {}
+    langchain_middleware = djgent_settings.get("LANGCHAIN_MIDDLEWARE", {}) or {}
+    hitl = langchain_middleware.get("human_in_the_loop", {}) or {}
+    if not hitl or hitl.get("enabled") is False:
+        return warnings
+
+    owner_emails = (
+        hitl.get("site_owner_emails")
+        or djgent_settings.get("SITE_OWNER_EMAILS")
+        or [email for _, email in getattr(settings, "ADMINS", [])]
+    )
+    if not owner_emails:
+        warnings.append(
+            Warning(
+                "Human-in-the-loop is enabled but no site owner emails are configured",
+                hint=(
+                    "Set DJGENT['LANGCHAIN_MIDDLEWARE']['human_in_the_loop']"
+                    "['site_owner_emails'], DJGENT['SITE_OWNER_EMAILS'], or ADMINS."
+                ),
+                id="djgent.W018",
+            )
+        )
+    return warnings
+
+
+@register()
 def check_djent_tools(app_configs, **kwargs) -> List[Warning]:
     """
     Check if built-in tools are registered.

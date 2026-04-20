@@ -35,12 +35,16 @@ from djgent.runtime import (
     AgentResult,
     ApprovalRequiredError,
     AuditMiddleware,
+    DjangoCheckpointSaver,
     DynamicPromptMiddleware,
     ExecutionContext,
     OutputGuardrailMiddleware,
     StateStore,
     ToolApprovalMiddleware,
     build_langchain_middleware,
+    extract_interrupt_payload,
+    is_human_in_the_loop_enabled,
+    normalize_decisions,
     resolve_langchain_middleware_config,
 )
 from djgent.runtime.mcp import load_mcp_tools
@@ -160,6 +164,12 @@ class Agent:
         middleware, configured_checkpointer = build_langchain_middleware(
             config=self._langchain_middleware_config,
         )
+        if (
+            is_human_in_the_loop_enabled(self._langchain_middleware_config)
+            and self._langchain_checkpointer is None
+            and configured_checkpointer is None
+        ):
+            configured_checkpointer = DjangoCheckpointSaver()
         return (
             middleware,
             self._langchain_checkpointer or configured_checkpointer,
@@ -420,15 +430,24 @@ class Agent:
                 agent = create_agent(self.llm, lc_tools)
 
             config = {"configurable": {"thread_id": execution.thread_id}}
+            use_hitl = is_human_in_the_loop_enabled(
+                self._langchain_middleware_config
+            )
             try:
-                return agent.invoke(
-                    {"messages": messages},
-                    config=config,
-                    context=execution.context,
+                invoke_kwargs = {
+                    "config": config,
+                    "context": execution.context,
                     **model_kwargs,
-                )
+                }
+                if use_hitl:
+                    invoke_kwargs["version"] = "v2"
+                return agent.invoke({"messages": messages}, **invoke_kwargs)
             except TypeError:
-                return agent.invoke({"messages": messages}, **model_kwargs)
+                invoke_kwargs = dict(model_kwargs)
+                if use_hitl:
+                    invoke_kwargs["config"] = config
+                    invoke_kwargs["version"] = "v2"
+                return agent.invoke({"messages": messages}, **invoke_kwargs)
 
         return self.llm.invoke(messages, **model_kwargs)
 
@@ -438,6 +457,9 @@ class Agent:
         """Normalize model results into text, structured payload, and messages."""
         structured_response = None
         output_messages: List[Any] = []
+
+        if hasattr(result, "value"):
+            return self._normalize_agent_output(result.value)
 
         if isinstance(result, dict):
             output_messages = list(result.get("messages", []))
@@ -597,6 +619,41 @@ class Agent:
             )
         )
 
+    def _persist_human_interaction_state(
+        self,
+        execution: ExecutionContext,
+        *,
+        output: str,
+        request_id: str,
+    ) -> None:
+        """Save durable thread state for a paused human interaction."""
+        history = execution.state.get("history", [])
+        history.append({"role": "human", "content": execution.input})
+        execution.state["history"] = history[-50:]
+        execution.state["status"] = "waiting_for_human"
+        execution.state["human_interaction_request_id"] = request_id
+        execution.state["last_output"] = output
+        values = dict(execution.state.get("values", {}) or {})
+        values["human_interaction_request_id"] = request_id
+        values["last_output"] = output
+        execution.state["values"] = values
+        self._state_store.save(
+            AgentExecutionState(
+                thread_id=execution.thread_id,
+                values=values,
+                summary=execution.state.get("summary"),
+                paused_tool_name=execution.state.get("paused_tool_name"),
+                paused_tool_arguments=execution.state.get(
+                    "paused_tool_arguments", {}
+                )
+                or {},
+                status="waiting_for_human",
+            )
+        )
+        execution.state = self._state_store.load(
+            execution.thread_id
+        ).to_dict()
+
     def _persist_failed_run(
         self,
         input: str,
@@ -662,6 +719,31 @@ class Agent:
         for item in self._audit_middleware_items():
             item.log_rate_limit(execution, error)
 
+    def _create_human_interaction_request(
+        self,
+        execution: ExecutionContext,
+        interrupt_payload: Dict[str, Any],
+    ) -> Any:
+        """Persist a HITL request and notify configured site owners."""
+        from djgent.runtime.human import (
+            human_in_the_loop_config,
+            persist_human_interaction_request,
+        )
+
+        conversation = getattr(self._memory_backend, "conversation", None)
+        requesting_user = getattr(self._memory_backend, "user", None)
+        return persist_human_interaction_request(
+            agent_name=self.name,
+            thread_id=execution.thread_id,
+            conversation=conversation,
+            requesting_user=requesting_user,
+            hitl_config=human_in_the_loop_config(
+                self._langchain_middleware_config
+            ),
+            action_requests=list(interrupt_payload.get("action_requests") or []),
+            review_configs=list(interrupt_payload.get("review_configs") or []),
+        )
+
     def _execute(
         self,
         input: str,
@@ -688,6 +770,40 @@ class Agent:
                 "run.start", input=input, thread_id=execution.thread_id
             )
             raw_result = self._invoke_model(messages, execution, **kwargs)
+            interrupt_payload = extract_interrupt_payload(raw_result)
+            if interrupt_payload:
+                request = self._create_human_interaction_request(
+                    execution, interrupt_payload
+                )
+                output = (
+                    "Tool execution is waiting for site owner approval. "
+                    f"Request: {request.id}"
+                )
+                self._persist_human_interaction_state(
+                    execution,
+                    output=output,
+                    request_id=str(request.id),
+                )
+                self._persist_failed_run(
+                    input,
+                    output,
+                    role="system",
+                    thread_id=execution.thread_id,
+                )
+                execution.emit(
+                    "run.human_interaction_required",
+                    request_id=str(request.id),
+                    actions=request.action_requests,
+                )
+                result = AgentResult(
+                    output=output,
+                    messages=messages,
+                    structured_response=None,
+                    state=execution.state,
+                    events=execution.events,
+                )
+                self._last_result = result
+                return result
             output, structured_response, output_messages = (
                 self._normalize_agent_output(raw_result)
             )
@@ -891,6 +1007,141 @@ class Agent:
         state.values["approved_tools"] = approvals
         state.status = "approved"
         self._state_store.save(state)
+
+    def resume_human_interaction(
+        self,
+        request_id: Any,
+        decisions: Optional[List[Dict[str, Any]]] = None,
+        reviewer: Optional[Any] = None,
+    ) -> AgentResult:
+        """Resume a LangChain HITL request after site owner review."""
+        from django.utils import timezone
+
+        from djgent.models import HumanInteractionRequest, Message
+
+        try:
+            from langgraph.types import Command
+        except Exception as exc:
+            raise AgentError(
+                "Resuming human interaction requires langgraph.types.Command."
+            ) from exc
+
+        request = HumanInteractionRequest.objects.get(id=request_id)
+        try:
+            resolved_decisions = normalize_decisions(
+                list(request.action_requests or []),
+                decisions,
+            )
+        except ValueError as exc:
+            raise AgentError(str(exc)) from exc
+
+        request.decisions = resolved_decisions
+        request.decided_at = timezone.now()
+        request.status = (
+            HumanInteractionRequest.STATUS_REJECTED
+            if resolved_decisions
+            and all(item.get("type") == "reject" for item in resolved_decisions)
+            else HumanInteractionRequest.STATUS_APPROVED
+        )
+        request.save(update_fields=["decisions", "decided_at", "status", "updated_at"])
+
+        self._initialize_memory_for_run()
+        execution = self._build_execution_context("", thread_id=request.thread_id)
+        langchain_middleware, checkpointer = self._build_langchain_runtime()
+        lc_tools = self._prepare_langchain_tools(execution)
+
+        from langchain.agents import create_agent
+
+        create_kwargs: Dict[str, Any] = {"model": self.llm, "tools": lc_tools}
+        if langchain_middleware:
+            create_kwargs["middleware"] = langchain_middleware
+        if checkpointer is not None:
+            create_kwargs["checkpointer"] = checkpointer
+        if self.response_schema is not None:
+            create_kwargs["response_format"] = self.response_schema
+
+        agent = create_agent(**create_kwargs)
+        config = {"configurable": {"thread_id": request.thread_id}}
+        command = Command(resume={"decisions": resolved_decisions})
+        try:
+            raw_result = agent.invoke(command, config=config, version="v2")
+        except TypeError:
+            raw_result = agent.invoke(command, config=config)
+
+        interrupt_payload = extract_interrupt_payload(raw_result)
+        if interrupt_payload:
+            next_request = self._create_human_interaction_request(
+                execution, interrupt_payload
+            )
+            output = (
+                "Tool execution is waiting for site owner approval. "
+                f"Request: {next_request.id}"
+            )
+            self._persist_human_interaction_state(
+                execution,
+                output=output,
+                request_id=str(next_request.id),
+            )
+            result = AgentResult(
+                output=output,
+                messages=[],
+                structured_response=None,
+                state=execution.state,
+                events=execution.events,
+            )
+            self._last_result = result
+            return result
+
+        output, structured_response, output_messages = self._normalize_agent_output(
+            raw_result
+        )
+        output = apply_after_run(self._middleware, execution, output)
+        request.output = str(output)
+        request.resumed_at = timezone.now()
+        request.status = HumanInteractionRequest.STATUS_RESUMED
+        request.save(update_fields=["output", "resumed_at", "status", "updated_at"])
+
+        state = self._state_store.load(request.thread_id)
+        state.status = "completed"
+        state.values["human_interaction_request_id"] = str(request.id)
+        state.values["human_interaction_reviewer"] = str(reviewer or "")
+        state.values["last_output"] = output
+        self._state_store.save(state)
+
+        if self.memory:
+            self._message_history.append(AIMessage(content=str(output)))
+            if self._ensure_memory_backend():
+                if request.conversation_id and getattr(
+                    self._memory_backend, "conversation_id", None
+                ) != str(request.conversation_id):
+                    Message.objects.create(
+                        conversation=request.conversation,
+                        role="ai",
+                        content=str(output),
+                        metadata={"thread_id": request.thread_id},
+                    )
+                else:
+                    self._memory_backend.add_message(
+                        "ai",
+                        str(output),
+                        thread_id=request.thread_id,
+                    )
+
+        execution.state = state.to_dict()
+        execution.emit(
+            "run.human_interaction_resumed",
+            request_id=str(request.id),
+            status=request.status,
+        )
+        result = AgentResult(
+            output=str(output),
+            messages=output_messages,
+            structured_response=structured_response,
+            state=execution.state,
+            events=execution.events,
+        )
+        self._last_result = result
+        return result
 
     def get_thread_state(
         self, thread_id: Optional[str] = None

@@ -21,6 +21,7 @@
 - 🌊 **Streaming + Async APIs** - `stream`, `astream`, `arun`, and `ainvoke`
 - 🧠 **Long-Term Memory** - Persist reusable facts across conversations
 - 📚 **Retrieval / Knowledge Base** - Ingest and search project knowledge documents
+- 🧩 **RAG Agent Context (Coming Soon)** - Automatically inject retrieved knowledge into agent prompts
 - 🔌 **MCP Integration** - Load tools from MCP servers when adapters are installed
 - 🔍 **Auto-Discovery** - Automatically discover and register tools from Django apps
 - ✅ **System Checks** - Built-in Django system checks for configuration validation
@@ -29,7 +30,6 @@
 - 🛡️ **Rate Limiting** - Protect agents from abuse with configurable rate limits
 - 📋 **Audit Logging** - Track all agent operations with persistent audit logs
 - 💨 **Response Caching** - Cache LLM responses to reduce costs and latency
-- ⛓️ **Chains** - Sequential execution of tools and agents
 - 🔎 **Input Validation** - Pydantic-based validation for all tool inputs
 
 ## Documentation
@@ -397,6 +397,78 @@ result = calculator.run("2 + 2 * 5")
 print(result)  # 12
 ```
 
+### Knowledge Retrieval Tools
+
+Djgent includes knowledge-base tools for storing and searching project-specific
+text. These are useful today as explicit tools, and they are the foundation for
+automatic RAG support coming in a future release.
+
+Enable the built-in tools:
+
+```python
+DJGENT = {
+    "BUILTIN_TOOLS": [
+        "calculator",
+        "datetime",
+        "knowledge_retrieval",
+        "knowledge_ingest",
+    ],
+}
+```
+
+Use them directly:
+
+```python
+from djgent.tools.registry import ToolRegistry
+
+ingest = ToolRegistry.get_tool_instance("knowledge_ingest")
+ingest.run(
+    title="Refund policy",
+    content="Customers can request a refund within 14 days.",
+    namespace="default",
+    source="policies/refunds.md",
+)
+
+retrieval = ToolRegistry.get_tool_instance("knowledge_retrieval")
+result = retrieval.run(
+    query="refund window",
+    limit=3,
+)
+print(result)
+```
+
+Or expose retrieval to an agent as a manual tool:
+
+```python
+agent = Agent.create(
+    name="support-assistant",
+    tools=["knowledge_retrieval"],
+    system_prompt=(
+        "Use the knowledge_retrieval tool for product policy questions. "
+        "If the knowledge base does not contain the answer, say so."
+    ),
+)
+
+response = agent.run("How long does a customer have to request a refund?")
+```
+
+### RAG Agent Context (Coming Soon)
+
+Automatic RAG is planned as a future feature. The goal is to let agents retrieve
+relevant `KnowledgeDocument` records before each model call and inject that
+context into the prompt automatically.
+
+Planned usage:
+
+```python
+agent = Agent.create(
+    name="support-assistant",
+    tools=["knowledge_retrieval"],
+    rag=True,  # Coming soon
+    system_prompt="Answer from retrieved company knowledge when available.",
+)
+```
+
 ### Persistent Conversation Memory (New!)
 
 Save conversation history to the database:
@@ -518,6 +590,39 @@ agent = Agent.create(
     },
 )
 ```
+
+Human-in-the-loop can pause selected tool calls, save the pending review in the
+database, email site owners, and resume after approval:
+
+```python
+DJGENT = {
+    "SITE_OWNER_EMAILS": ["owner@example.com"],
+    "LANGCHAIN_MIDDLEWARE": {
+        "human_in_the_loop": {
+            "enabled": True,
+            "interrupt_on": {
+                "delete_record": {
+                    "allowed_decisions": ["approve", "reject"],
+                    "description": "Deleting records requires owner approval.",
+                },
+                "send_email": {
+                    "allowed_decisions": ["approve", "edit", "reject"],
+                },
+            },
+            "description_prefix": "Tool execution pending site owner approval",
+            "notify_email": True,
+            "site_url": "https://example.com",
+        }
+    },
+}
+
+agent.resume_human_interaction(request_id)
+```
+
+Pending requests are visible in Django admin under Djgent human interaction
+requests. Owner notification recipients resolve from
+`human_in_the_loop.site_owner_emails`, then `DJGENT["SITE_OWNER_EMAILS"]`, then
+Django `ADMINS`.
 
 See [docs/MIDDLEWARE.md](docs/MIDDLEWARE.md) for the full guide.
 
@@ -672,6 +777,8 @@ knowledge_input = KnowledgeRetrievalInput(
 | `weather` | Get weather information (requires API key) |
 | `django_model` | Read-only generic Django model queries for admin/debug workflows |
 | `django_auth` | Check user authentication, permissions, and groups |
+| `knowledge_retrieval` | Search stored project knowledge documents |
+| `knowledge_ingest` | Store project knowledge documents for retrieval workflows |
 
 ### Model Query Tools
 

@@ -334,3 +334,136 @@ class AuditLog(models.Model):
 
     def __str__(self) -> str:
         return f"{self.event_type} - {self.agent_name} - {self.timestamp}"
+
+
+class HumanInteractionRequest(models.Model):
+    """Pending site-owner review for LangChain human-in-the-loop interrupts."""
+
+    STATUS_PENDING = "pending"
+    STATUS_APPROVED = "approved"
+    STATUS_REJECTED = "rejected"
+    STATUS_RESUMED = "resumed"
+    STATUS_FAILED = "failed"
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_APPROVED, "Approved"),
+        (STATUS_REJECTED, "Rejected"),
+        (STATUS_RESUMED, "Resumed"),
+        (STATUS_FAILED, "Failed"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    status = models.CharField(
+        max_length=32,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        db_index=True,
+    )
+    agent_name = models.CharField(max_length=255, db_index=True)
+    thread_id = models.CharField(max_length=255, db_index=True)
+    conversation = models.ForeignKey(
+        Conversation,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="human_interaction_requests",
+    )
+    requesting_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="djgent_human_interaction_requests",
+    )
+    site_owner_emails = models.JSONField(default=list, blank=True)
+    action_requests = models.JSONField(default=list, blank=True)
+    review_configs = models.JSONField(default=list, blank=True)
+    decisions = models.JSONField(default=list, blank=True)
+    output = models.TextField(blank=True, default="")
+    error = models.TextField(blank=True, default="")
+    notification_error = models.TextField(blank=True, default="")
+    emailed_at = models.DateTimeField(null=True, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    resumed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "djgent_human_interaction_request"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "-created_at"]),
+            models.Index(fields=["agent_name", "status"]),
+            models.Index(fields=["thread_id", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.agent_name}:{self.thread_id}:{self.status}"
+
+
+class LangGraphCheckpoint(models.Model):
+    """Serialized LangGraph checkpoint stored by thread/checkpoint id."""
+
+    thread_id = models.CharField(max_length=255, db_index=True)
+    checkpoint_ns = models.CharField(max_length=255, blank=True, default="")
+    checkpoint_id = models.CharField(max_length=255, db_index=True)
+    parent_checkpoint_id = models.CharField(max_length=255, blank=True, default="")
+    config = models.JSONField(default=dict, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    checkpoint = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "djgent_langgraph_checkpoint"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["thread_id", "checkpoint_ns", "checkpoint_id"],
+                name="djgent_lg_checkpoint_unique",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["thread_id", "checkpoint_ns", "-created_at"],
+                name="djgent_lg_ckpt_thread_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.thread_id}:{self.checkpoint_id}"
+
+
+class LangGraphCheckpointWrite(models.Model):
+    """Serialized LangGraph pending write linked to a checkpoint task."""
+
+    thread_id = models.CharField(max_length=255, db_index=True)
+    checkpoint_ns = models.CharField(max_length=255, blank=True, default="")
+    checkpoint_id = models.CharField(max_length=255, db_index=True)
+    task_id = models.CharField(max_length=255, db_index=True)
+    idx = models.IntegerField()
+    channel = models.CharField(max_length=255)
+    value = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "djgent_langgraph_checkpoint_write"
+        ordering = ["idx"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "thread_id",
+                    "checkpoint_ns",
+                    "checkpoint_id",
+                    "task_id",
+                    "idx",
+                ],
+                name="djgent_lg_write_unique",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["thread_id", "checkpoint_ns", "checkpoint_id"],
+                name="djgent_lg_write_ckpt_idx",
+            ),
+        ]

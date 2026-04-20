@@ -74,6 +74,7 @@ DJGENT_DEFAULTS = {
     #     },
     # }
     "LANGCHAIN_MIDDLEWARE": {},
+    "SITE_OWNER_EMAILS": [],
     # Audit logging configuration.
     # Automatic middleware can be disabled while still allowing manual
     # AuditMiddleware use through Agent(..., middleware=[...]).
