@@ -7,19 +7,19 @@ import json
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+from typing import Any, Callable, Dict, Optional, TypeVar
 
 from django.core.cache import cache
 
 from djgent.runtime.middleware import ExecutionContext
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass
 class CacheEntry:
     """Represents a cached response."""
+
     key: str
     value: Any
     created_at: float = field(default_factory=time.time)
@@ -48,14 +48,14 @@ class CacheEntry:
 class ResponseCache:
     """
     Caching layer for LLM responses.
-    
+
     Supports:
     - In-memory caching
     - Django cache backend
     - TTL (time to live) expiration
     - Cache invalidation
     - Statistics tracking
-    
+
     Example:
         # Initialize cache
         cache = ResponseCache(
@@ -63,13 +63,13 @@ class ResponseCache:
             ttl_seconds=300,
             max_entries=1000
         )
-        
+
         # Cache a response
         cache.set("prompt_hash", "LLM response here")
-        
+
         # Get cached response
         cached = cache.get("prompt_hash")
-        
+
         # Or use as decorator
         @cache.cached(ttl_seconds=60)
         async def get_llm_response(prompt: str) -> str:
@@ -85,7 +85,7 @@ class ResponseCache:
     ):
         """
         Initialize the response cache.
-        
+
         Args:
             backend: Cache backend ("memory", "django", or "both")
             ttl_seconds: Default time to live in seconds
@@ -112,9 +112,9 @@ class ResponseCache:
     def _hash_key(self, data: Any) -> str:
         """Hash data to create a cache key."""
         if isinstance(data, str):
-            data_bytes = data.encode('utf-8')
+            data_bytes = data.encode("utf-8")
         else:
-            data_bytes = json.dumps(data, sort_keys=True).encode('utf-8')
+            data_bytes = json.dumps(data, sort_keys=True).encode("utf-8")
         return hashlib.sha256(data_bytes).hexdigest()[:32]
 
     def set(
@@ -126,7 +126,7 @@ class ResponseCache:
     ) -> None:
         """
         Store a value in the cache.
-        
+
         Args:
             key: Cache key
             value: Value to cache
@@ -145,7 +145,10 @@ class ResponseCache:
 
         with self._lock:
             # Evict if at capacity
-            if len(self._memory_store) >= self.max_entries and key not in self._memory_store:
+            if (
+                len(self._memory_store) >= self.max_entries
+                and key not in self._memory_store
+            ):
                 self._evict_oldest()
 
             self._memory_store[key] = entry
@@ -161,10 +164,10 @@ class ResponseCache:
     def get(self, key: str) -> Optional[Any]:
         """
         Retrieve a value from the cache.
-        
+
         Args:
             key: Cache key
-            
+
         Returns:
             Cached value or None if not found/expired
         """
@@ -204,7 +207,7 @@ class ResponseCache:
     def delete(self, key: str) -> None:
         """
         Delete a key from the cache.
-        
+
         Args:
             key: Cache key to delete
         """
@@ -226,7 +229,7 @@ class ResponseCache:
             try:
                 # Use cache.iter_keys() if available (Redis), otherwise use get_many approach
                 # For Django cache, we'll track keys ourselves instead of using KEYS
-                if hasattr(cache, 'iter_keys'):
+                if hasattr(cache, "iter_keys"):
                     # Redis-compatible iteration
                     for key in cache.iter_keys(f"{self.key_prefix}:*"):
                         cache.delete(key)
@@ -244,7 +247,7 @@ class ResponseCache:
 
         oldest_key = min(
             self._memory_store.keys(),
-            key=lambda k: self._memory_store[k].created_at
+            key=lambda k: self._memory_store[k].created_at,
         )
         del self._memory_store[oldest_key]
         self._stats["evictions"] += 1
@@ -256,26 +259,31 @@ class ResponseCache:
     ) -> Callable[[Callable[..., T]], Callable[..., T]]:
         """
         Decorator to cache function results.
-        
+
         Args:
             ttl: Time to live in seconds
             key_func: Function to generate cache key from args
-            
+
         Returns:
             Decorated function
-            
+
         Example:
             @cache.cached(ttl=60)
             def get_weather(location: str) -> dict:
                 ...
         """
+
         def decorator(func: Callable[..., T]) -> Callable[..., T]:
             def wrapper(*args: Any, **kwargs: Any) -> T:
                 # Generate cache key
                 if key_func:
                     cache_key = key_func(*args, **kwargs)
                 else:
-                    key_data = {"func": func.__name__, "args": args, "kwargs": kwargs}
+                    key_data = {
+                        "func": func.__name__,
+                        "args": args,
+                        "kwargs": kwargs,
+                    }
                     cache_key = self._hash_key(key_data)
 
                 # Try to get from cache
@@ -289,6 +297,7 @@ class ResponseCache:
                 return result
 
             return wrapper  # type: ignore
+
         return decorator
 
     def get_stats(self) -> Dict[str, Any]:
@@ -331,10 +340,10 @@ response_cache = ResponseCache()
 class CacheMiddleware:
     """
     Middleware for caching agent responses.
-    
+
     Example:
         cache_middleware = CacheMiddleware(ttl_seconds=300)
-        
+
         agent = Agent(
             name="my_agent",
             middleware=[cache_middleware]
@@ -349,7 +358,7 @@ class CacheMiddleware:
     ):
         """
         Initialize cache middleware.
-        
+
         Args:
             cache: ResponseCache instance
             ttl_seconds: Default TTL for cached responses
@@ -405,13 +414,13 @@ class CacheMiddleware:
             metadata={
                 "agent_name": agent_name,
                 "thread_id": thread_id,
-            }
+            },
         )
 
     def before_run(self, execution: ExecutionContext) -> None:
         """
         Check cache before agent run.
-        
+
         If cached response exists, store it in execution metadata for after_run to return.
         """
         if not self.enabled:
@@ -422,7 +431,7 @@ class CacheMiddleware:
             message=execution.input,
             thread_id=execution.thread_id,
         )
-        
+
         if cached is not None:
             execution.metadata["cached_response"] = cached
             execution.metadata["cache_hit"] = True
@@ -445,7 +454,7 @@ class CacheMiddleware:
             response=output,
             thread_id=execution.thread_id,
         )
-        
+
         return output
 
     def invalidate(
