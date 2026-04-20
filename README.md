@@ -663,31 +663,6 @@ knowledge_input = KnowledgeRetrievalInput(
 )
 ```
 
-### Chains (New!)
-
-Execute multiple steps sequentially:
-
-```python
-from djgent.chains import Chain
-
-# Define steps
-def step1(data):
-    return f"Step 1: {data}"
-
-def step2(data):
-    return f"Step 2: {data}"
-
-def step3(data):
-    return f"Step 3: {data}"
-
-# Create and execute chain
-chain = Chain()
-chain.add(step1).add(step2).add(step3)
-
-result = chain.execute("hello")
-# Result: "Step 3: Step 2: Step 1: hello"
-```
-
 ## Built-in Tools
 
 | Tool | Description |
@@ -976,26 +951,6 @@ from djgent.tools.schemas import (
 validated = validate_tool_input(ToolExecutionInput, **data)
 ```
 
-### Chains API
-
-```python
-from djgent.chains import Chain
-
-# Create chain
-chain = Chain()
-
-# Add steps
-chain.add(step_callable)
-chain.add(another_step)
-
-# Execute
-result = chain.execute(input_data)
-
-# Chain methods
-len(chain)          # Get number of steps
-chain.clear()        # Clear all steps
-```
-
 ## Project Structure
 
 ```
@@ -1044,7 +999,6 @@ djgent/
 │   └── public_models.py # Public model registration
 ├── audit.py             # Audit logging
 ├── cache.py             # Response caching
-├── chains.py            # Chain execution
 ├── models.py            # Conversation, Message, AuditLog models
 ├── admin.py             # Django admin configuration
 ├── exceptions.py        # Custom exceptions
@@ -1123,7 +1077,6 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - Added audit logging with `AuditLogger` and `AuditLog` model
 - Added response caching with `ResponseCache` and `CacheMiddleware`
 - Added Pydantic input validation schemas in `djgent.tools.schemas`
-- Added `Chain` class for sequential tool/agent execution
 - Added runtime schemas (`StreamEvent`, `ApprovalRequest`, `AgentResult`)
 - Added tests for agent, tools, and memory modules
 
