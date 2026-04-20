@@ -5,20 +5,21 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
-from djgent.models import AuditLog
+from typing import Any, Dict, List, Optional
+
 from django.conf import settings
+
+from djgent.models import AuditLog
 
 logger = logging.getLogger(__name__)
 
 
-
-
 class AuditEventType(str, Enum):
     """Types of audit events."""
+
     AGENT_RUN = "agent_run"
     TOOL_EXECUTION = "tool_execution"
     TOOL_APPROVAL = "tool_approval"
@@ -32,6 +33,7 @@ class AuditEventType(str, Enum):
 
 class AuditLevel(str, Enum):
     """Audit event severity levels."""
+
     DEBUG = "debug"
     INFO = "info"
     WARNING = "warning"
@@ -39,11 +41,36 @@ class AuditLevel(str, Enum):
     CRITICAL = "critical"
 
 
+def _audit_settings() -> Dict[str, Any]:
+    """Return audit settings merged with package defaults."""
+    try:
+        from djgent.settings import DJGENT_DEFAULTS
+
+        defaults = DJGENT_DEFAULTS.get("AUDIT", {})
+    except Exception:
+        defaults = {}
+
+    user_settings = getattr(settings, "DJGENT", {}) or {}
+    return {**defaults, **user_settings.get("AUDIT", {})}
+
+
+def parse_audit_level(value: Any, default: AuditLevel = AuditLevel.INFO) -> AuditLevel:
+    """Parse an AuditLevel from settings/user input."""
+    if isinstance(value, AuditLevel):
+        return value
+    if isinstance(value, str):
+        try:
+            return AuditLevel(value.lower())
+        except ValueError:
+            return default
+    return default
+
+
 @dataclass
 class AuditEvent:
     """
     Represents an audit event.
-    
+
     Example:
         event = AuditEvent(
             event_type=AuditEventType.AGENT_RUN,
@@ -54,6 +81,7 @@ class AuditEvent:
         )
         audit_logger.log(event)
     """
+
     event_type: AuditEventType
     level: AuditLevel = AuditLevel.INFO
     agent_name: Optional[str] = None
@@ -94,16 +122,16 @@ class AuditEvent:
 class AuditLogger:
     """
     Centralized audit logging for agent operations.
-    
+
     Can be configured to log to various backends:
     - Django models (database)
     - File
     - External logging system
-    
+
     Example:
         # Initialize logger
         audit = AuditLogger()
-        
+
         # Log an event
         audit.log_agent_run(
             agent_name="my_agent",
@@ -111,7 +139,7 @@ class AuditLogger:
             input_message="Hello",
             output_message="Hi there!"
         )
-        
+
         # Query audit logs
         events = audit.query(
             agent_name="my_agent",
@@ -122,21 +150,32 @@ class AuditLogger:
 
     def __init__(
         self,
-        log_to_database: bool = True,
-        log_to_console: bool = False,
-        log_level: AuditLevel = AuditLevel.INFO,
+        log_to_database: Optional[bool] = None,
+        log_to_console: Optional[bool] = None,
+        log_level: Optional[AuditLevel] = None,
     ):
         """
         Initialize audit logger.
-        
+
         Args:
             log_to_database: Whether to log to Django database
             log_to_console: Whether to log to console
             log_level: Minimum level to log
         """
-        self.log_to_database = log_to_database
-        self.log_to_console = log_to_console
-        self.log_level = log_level
+        config = _audit_settings()
+        self.log_to_database = (
+            bool(config.get("LOG_TO_DATABASE", True))
+            if log_to_database is None
+            else log_to_database
+        )
+        self.log_to_console = (
+            bool(config.get("LOG_TO_CONSOLE", False))
+            if log_to_console is None
+            else log_to_console
+        )
+        self.log_level = parse_audit_level(
+            log_level if log_level is not None else config.get("LOG_LEVEL", "info")
+        )
 
     def _should_log(self, level: AuditLevel) -> bool:
         """Check if level should be logged."""
@@ -146,7 +185,7 @@ class AuditLogger:
     def log(self, event: AuditEvent) -> None:
         """
         Log an audit event.
-        
+
         Args:
             event: The audit event to log
         """
@@ -166,7 +205,11 @@ class AuditLogger:
 
     def _log_to_console(self, event: AuditEvent) -> None:
         """Log to console."""
-        print(f"[AUDIT] {event.timestamp.isoformat()} | {event.event_type.value} | {event.level.value} | {event.agent_name or 'N/A'}")
+        print(
+            "[AUDIT] "
+            f"{event.timestamp.isoformat()} | {event.event_type.value} | "
+            f"{event.level.value} | {event.agent_name or 'N/A'}"
+        )
 
     def _log_to_database(self, event: AuditEvent) -> None:
         """Log to Django database."""
@@ -192,7 +235,7 @@ class AuditLogger:
         """Log to Python logger."""
         log_data = event.to_dict()
         log_func = getattr(logger, event.level.value, logger.info)
-        log_func(json.dumps(log_data))
+        log_func(json.dumps(log_data, default=repr))
 
     def log_agent_run(
         self,
@@ -234,11 +277,18 @@ class AuditLogger:
         conversation_id: Optional[str] = None,
         duration_ms: Optional[float] = None,
         error: Optional[str] = None,
+        log_result: bool = False,
     ) -> AuditEvent:
         """Log a tool execution event."""
         # Sanitize arguments to remove sensitive data
         safe_arguments = self._sanitize_arguments(arguments)
-        
+        details = {
+            "arguments": safe_arguments,
+            "result_type": type(result).__name__,
+        }
+        if log_result:
+            details["result"] = self._safe_detail_value(result)
+
         event = AuditEvent(
             event_type=AuditEventType.TOOL_EXECUTION,
             level=AuditLevel.ERROR if error else AuditLevel.INFO,
@@ -247,10 +297,7 @@ class AuditLogger:
             user_id=user_id,
             thread_id=thread_id,
             conversation_id=conversation_id,
-            details={
-                "arguments": safe_arguments,
-                "result_type": type(result).__name__,
-            },
+            details=details,
             duration_ms=duration_ms,
             error=error,
         )
@@ -264,17 +311,22 @@ class AuditLogger:
         approved: bool,
         agent_name: Optional[str] = None,
         user_id: Optional[int] = None,
+        thread_id: Optional[str] = None,
+        conversation_id: Optional[str] = None,
         reason: Optional[str] = None,
     ) -> AuditEvent:
         """Log a tool approval event."""
+        safe_arguments = self._sanitize_arguments(arguments)
         event = AuditEvent(
             event_type=AuditEventType.TOOL_APPROVAL,
             level=AuditLevel.INFO,
             agent_name=agent_name,
             tool_name=tool_name,
             user_id=user_id,
+            thread_id=thread_id,
+            conversation_id=conversation_id,
             details={
-                "arguments": arguments,
+                "arguments": safe_arguments,
                 "approved": approved,
                 "reason": reason,
             },
@@ -301,18 +353,50 @@ class AuditLogger:
 
     def _sanitize_arguments(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Remove sensitive data from arguments."""
-        sensitive_keys = {'password', 'secret', 'token', 'api_key', 'key', 'auth'}
+        sensitive_keys = {
+            "password",
+            "secret",
+            "token",
+            "api_key",
+            "key",
+            "auth",
+        }
         sanitized = {}
-        
+
         for key, value in arguments.items():
-            if any(s in key.lower() for s in sensitive_keys):
+            key_text = str(key)
+            if key_text.lower() == "runtime":
+                sanitized[key] = repr(value)
+            elif any(s in key_text.lower() for s in sensitive_keys):
                 sanitized[key] = "***REDACTED***"
             elif isinstance(value, dict):
                 sanitized[key] = self._sanitize_arguments(value)
             else:
-                sanitized[key] = value
-        
+                sanitized[key] = self._safe_detail_value(value)
+
         return sanitized
+
+    def _safe_detail_value(self, value: Any) -> Any:
+        """Return a JSON-friendly value for optional audit details."""
+        if is_dataclass(value):
+            return {
+                item.name: self._safe_detail_value(getattr(value, item.name))
+                for item in fields(value)
+            }
+        if isinstance(value, dict):
+            return {
+                str(key): self._safe_detail_value(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, (list, tuple)):
+            return [self._safe_detail_value(item) for item in value]
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        try:
+            json.dumps(value)
+            return value
+        except TypeError:
+            return repr(value)
 
     def query(
         self,
@@ -327,7 +411,7 @@ class AuditLogger:
     ) -> List[AuditEvent]:
         """
         Query audit events.
-        
+
         Args:
             agent_name: Filter by agent name
             event_type: Filter by event type
@@ -337,7 +421,7 @@ class AuditLogger:
             start_time: Filter by start time
             end_time: Filter by end time
             limit: Maximum number of results
-            
+
         Returns:
             List of matching audit events
         """
@@ -361,7 +445,7 @@ class AuditLogger:
         if end_time:
             queryset = queryset.filter(timestamp__lte=end_time)
 
-        queryset = queryset.order_by('-timestamp')[:limit]
+        queryset = queryset.order_by("-timestamp")[:limit]
 
         return [
             AuditEvent(
@@ -386,10 +470,10 @@ class AuditLogger:
 def get_audit_logger() -> AuditLogger:
     """
     Get the global audit logger instance.
-    
+
     Returns a lazy-initialized audit logger to avoid issues
     when importing before Django is set up.
-    
+
     Example:
         audit = get_audit_logger()
         audit.log_agent_run(

@@ -6,7 +6,7 @@ import asyncio
 import json
 import re
 import uuid
-from dataclasses import asdict, is_dataclass
+from dataclasses import fields, is_dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -34,6 +34,7 @@ from djgent.runtime import (
     AgentMiddleware,
     AgentResult,
     ApprovalRequiredError,
+    AuditMiddleware,
     DynamicPromptMiddleware,
     ExecutionContext,
     OutputGuardrailMiddleware,
@@ -121,13 +122,36 @@ class Agent:
         middleware: Optional[List[AgentMiddleware]] = None,
     ) -> List[AgentMiddleware]:
         """Compose the default runtime middleware stack."""
-        stack: List[AgentMiddleware] = [
-            DynamicPromptMiddleware(),
-            ToolApprovalMiddleware(),
-            OutputGuardrailMiddleware(),
-        ]
-        stack.extend(middleware or [])
+        user_middleware = middleware or []
+        stack: List[AgentMiddleware] = []
+
+        if self._audit_auto_enabled() and not any(
+            isinstance(item, AuditMiddleware) for item in user_middleware
+        ):
+            stack.append(AuditMiddleware())
+
+        stack.extend(
+            [
+                DynamicPromptMiddleware(),
+                ToolApprovalMiddleware(),
+                OutputGuardrailMiddleware(),
+            ]
+        )
+        stack.extend(user_middleware)
         return stack
+
+    def _audit_auto_enabled(self) -> bool:
+        """Return whether the default audit middleware should be installed."""
+        try:
+            from djgent.audit import _audit_settings
+
+            config = _audit_settings()
+        except Exception:
+            return False
+
+        return bool(config.get("ENABLED", True)) and bool(
+            config.get("AUTO_MIDDLEWARE", True)
+        )
 
     def _build_langchain_runtime(
         self,
@@ -231,6 +255,13 @@ class Agent:
             context=dict(context or {}),
             state=durable_state.to_dict(),
         )
+        if self._memory_backend and self._memory_backend.conversation_id:
+            execution.metadata["conversation_id"] = str(
+                self._memory_backend.conversation_id
+            )
+        user = getattr(self._memory_backend, "user", None)
+        if user is not None and getattr(user, "is_authenticated", False):
+            execution.metadata["user_id"] = getattr(user, "id", None)
         execution.context.setdefault("risky_tools", self._risky_tool_map())
         execution.context.setdefault(
             "approved_tools", durable_state.values.get("approved_tools", {})
@@ -273,14 +304,22 @@ class Agent:
         lc_tools = []
 
         def before_tool(tool_name: str, arguments: Dict[str, Any]) -> None:
-            execution.emit("tool.start", tool=tool_name, arguments=arguments)
+            execution.emit(
+                "tool.start",
+                tool=tool_name,
+                arguments=self._safe_event_value(arguments),
+            )
             apply_before_tool(self._middleware, execution, tool_name, arguments)
 
         def after_tool(tool_name: str, result: Any) -> Any:
             result = apply_after_tool(
                 self._middleware, execution, tool_name, result
             )
-            execution.emit("tool.end", tool=tool_name, result=result)
+            execution.emit(
+                "tool.end",
+                tool=tool_name,
+                result=self._safe_event_value(result),
+            )
             return result
 
         for tool in self.tools:
@@ -295,6 +334,28 @@ class Agent:
                 lc_tools.append(tool)
 
         return lc_tools
+
+    def _safe_event_value(self, value: Any) -> Any:
+        """Return a JSON-friendly value for emitted runtime events."""
+        if is_dataclass(value):
+            return {
+                item.name: self._safe_event_value(getattr(value, item.name))
+                for item in fields(value)
+            }
+        if isinstance(value, dict):
+            return {
+                str(key): self._safe_event_value(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, (list, tuple)):
+            return [self._safe_event_value(item) for item in value]
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        try:
+            json.dumps(value)
+            return value
+        except TypeError:
+            return repr(value)
 
     def _invoke_model(
         self,
@@ -406,7 +467,11 @@ class Agent:
             if hasattr(result, "model_dump_json"):
                 return result.model_dump_json(), structured_response, []
             if is_dataclass(result):
-                return json.dumps(asdict(result)), structured_response, []
+                return (
+                    json.dumps(self._safe_event_value(result)),
+                    structured_response,
+                    [],
+                )
             if isinstance(result, dict):
                 return json.dumps(result), structured_response, []
 
@@ -562,6 +627,41 @@ class Agent:
                 thread_id=thread_id,
             )
 
+    def _audit_middleware_items(self) -> List[AuditMiddleware]:
+        """Return configured audit middleware instances."""
+        return [
+            item
+            for item in self._middleware
+            if isinstance(item, AuditMiddleware)
+        ]
+
+    def _log_audit_failed_run(
+        self, execution: ExecutionContext, error: Exception
+    ) -> None:
+        """Ask audit middleware to record a failed run."""
+        for item in self._audit_middleware_items():
+            item.log_failed_run(execution, error)
+
+    def _log_audit_tool_approval(
+        self, execution: ExecutionContext, error: ApprovalRequiredError
+    ) -> None:
+        """Ask audit middleware to record an approval interruption."""
+        for item in self._audit_middleware_items():
+            item.log_tool_approval(
+                execution,
+                error.request.tool_name,
+                error.request.arguments,
+                approved=False,
+                reason=error.request.reason,
+            )
+
+    def _log_audit_rate_limit(
+        self, execution: ExecutionContext, error: Exception
+    ) -> None:
+        """Ask audit middleware to record a rate-limit failure."""
+        for item in self._audit_middleware_items():
+            item.log_rate_limit(execution, error)
+
     def _execute(
         self,
         input: str,
@@ -580,11 +680,13 @@ class Agent:
         if active_schema is not self.response_schema:
             self.response_schema = active_schema
 
-        apply_before_run(self._middleware, execution)
-        messages = self._build_messages(input, execution)
-        execution.emit("run.start", input=input, thread_id=execution.thread_id)
-
+        messages: List[BaseMessage] = []
         try:
+            apply_before_run(self._middleware, execution)
+            messages = self._build_messages(input, execution)
+            execution.emit(
+                "run.start", input=input, thread_id=execution.thread_id
+            )
             raw_result = self._invoke_model(messages, execution, **kwargs)
             output, structured_response, output_messages = (
                 self._normalize_agent_output(raw_result)
@@ -622,6 +724,7 @@ class Agent:
                 tool=exc.request.tool_name,
                 reason=exc.request.reason,
             )
+            self._log_audit_tool_approval(execution, exc)
             result = AgentResult(
                 output=exc.request.reason or str(exc),
                 messages=messages,
@@ -632,12 +735,19 @@ class Agent:
             self._last_result = result
             return result
         except Exception as exc:
+            from djgent.exceptions import RateLimitError
+
+            if isinstance(exc, RateLimitError):
+                self._log_audit_rate_limit(execution, exc)
+            self._log_audit_failed_run(execution, exc)
             self._persist_failed_run(
                 input,
                 str(exc),
                 role="system",
                 thread_id=execution.thread_id,
             )
+            if isinstance(exc, RateLimitError):
+                raise
             raise AgentError(
                 f"Error executing agent '{self.name}': {str(exc)}"
             ) from exc

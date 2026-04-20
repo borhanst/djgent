@@ -74,4 +74,17 @@ DJGENT_DEFAULTS = {
     #     },
     # }
     "LANGCHAIN_MIDDLEWARE": {},
+    # Audit logging configuration.
+    # Automatic middleware can be disabled while still allowing manual
+    # AuditMiddleware use through Agent(..., middleware=[...]).
+    "AUDIT": {
+        "ENABLED": True,
+        "LOG_TO_DATABASE": True,
+        "LOG_TO_CONSOLE": False,
+        "LOG_LEVEL": "info",
+        "LOG_INPUT_OUTPUT": True,
+        "LOG_TOOL_ARGUMENTS": True,
+        "LOG_TOOL_RESULTS": False,
+        "AUTO_MIDDLEWARE": True,
+    },
 }

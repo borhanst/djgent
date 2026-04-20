@@ -5,24 +5,35 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Optional
 
-from djgent.tools.base import Tool
 from djgent.retrieval.base import DjangoKnowledgeRetriever
+from djgent.tools.base import Tool
 
 
 class RetrievalTool(Tool):
     """Query a retriever-backed knowledge base."""
 
     name = "knowledge_retrieval"
-    description = "Search Djgent knowledge documents and return relevant context."
+    description = (
+        "Search Djgent knowledge documents and return relevant context."
+    )
     risk_level = "low"
 
-    def __init__(self, retriever: Optional[Any] = None, namespace: str = "default", **kwargs: Any):
+    def __init__(
+        self,
+        retriever: Optional[Any] = None,
+        namespace: str = "default",
+        **kwargs: Any,
+    ):
         super().__init__(**kwargs)
         self.namespace = namespace
-        self.retriever = retriever or DjangoKnowledgeRetriever(namespace=namespace)
+        self.retriever = retriever or DjangoKnowledgeRetriever(
+            namespace=namespace
+        )
 
     def _run(self, query: str, limit: int = 5, **kwargs: Any) -> str:
-        documents = self.retriever.get_relevant_documents(query, limit=limit, **kwargs)
+        documents = self.retriever.get_relevant_documents(
+            query, limit=limit, **kwargs
+        )
         return json.dumps(
             {
                 "query": query,

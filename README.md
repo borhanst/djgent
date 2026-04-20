@@ -582,19 +582,17 @@ response = agent.run("Hello!")
 Track all agent operations with persistent audit logs:
 
 ```python
-from djgent.audit import AuditLogger, AuditEventType, AuditLevel
+from djgent.audit import AuditLogger
 
 # Create audit logger
 audit_logger = AuditLogger()
 
-# Log an event
-audit_logger.log(
-    event_type=AuditEventType.AGENT_RUN,
-    level=AuditLevel.INFO,
+# Log an agent run
+audit_logger.log_agent_run(
     agent_name="assistant",
     user_id=1,
-    message="User asked about weather",
-    metadata={"query": "weather in Dhaka"},
+    input_message="weather in Dhaka",
+    output_message="It is warm today.",
 )
 
 # Query audit logs
@@ -880,13 +878,18 @@ from djgent.audit import (
 audit_logger = AuditLogger()
 
 # Log events
-audit_logger.log(
-    event_type: AuditEventType,
-    level: AuditLevel,
-    agent_name: str,
-    user_id: Optional[int],
-    message: str,
-    metadata: Dict[str, Any] = {},
+audit_logger.log_agent_run(
+    agent_name="assistant",
+    input_message="Hello",
+    output_message="Hi there!",
+    user_id=1,
+)
+
+audit_logger.log_tool_execution(
+    tool_name="calculator",
+    arguments={"expression": "2 + 2"},
+    result=4,
+    agent_name="assistant",
 )
 
 # Query logs

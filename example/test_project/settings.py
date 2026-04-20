@@ -111,4 +111,9 @@ DJGENT = {
         "demo_app.Book": ["id", "title", "genre", "published_year", "author"],
         "demo_app.Author": ["id", "name", "country"],
     },
+    "AUDIT": {
+        "ENABLED": True,
+        "LOG_LEVEL": "INFO",
+
+    }
 }
