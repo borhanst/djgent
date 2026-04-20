@@ -1,7 +1,6 @@
 from pydantic import BaseModel
 
-from djgent import ModelQueryTool
-from djgent.tools.registry import ToolRegistry
+from djgent import ModelQueryTool, tool
 
 from .models import Book
 
@@ -17,6 +16,7 @@ class BookSchema(BaseModel):
     author: BookAuthorSchema
 
 
+@tool
 class BookQueryTool(ModelQueryTool):
     name = "book_query"
     description = "Query demo books using a Pydantic schema"
@@ -25,4 +25,21 @@ class BookQueryTool(ModelQueryTool):
     schema = BookSchema
 
 
-ToolRegistry.register(name="book_query")(BookQueryTool)
+
+@tool
+def calculator(query: str) -> str:
+    """
+    A simple calculator tool that evaluates basic arithmetic expressions.
+
+    Args:
+        query: A string containing the arithmetic expression to evaluate.
+
+    Returns:
+        The result of the evaluated expression as a string.
+    """
+    try:
+        # WARNING: Using eval can be dangerous in production. This is just for demo purposes.
+        result = eval(query, {"__builtins__": {}})
+        return str(result)
+    except Exception as e:
+        return f"Error evaluating expression: {e}"

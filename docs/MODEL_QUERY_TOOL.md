@@ -29,11 +29,12 @@ from myapp.models import Product
 class ProductQueryTool(ModelQueryTool):
     name = "product_query"
     description = "Query products from database"
-    queryset = Product.objects.filter(active=True)
+    queryset = Product.objects.filter(active=True).select_related("category")
     exclude_fields = ["cost_price", "supplier_secret"]
     require_auth = False  # Public access
     max_results = 100
     default_limit = 10
+    allowed_fields = ["id", "name", "price", "category"]
 ```
 
 ### Query by Different Fields
@@ -65,6 +66,9 @@ tool = ProductQueryTool()
 # List objects
 result = tool._run(action="list", limit=20, offset=0)
 # Returns: {"success": true, "count": 20, "total_count": 150, "data": [...]}
+
+# Skip total_count when you want one fewer count query
+result = tool._run(action="list", include_total=False)
 
 # Filter objects
 result = tool._run(
@@ -194,6 +198,12 @@ product_query = tool(ProductQueryTool)
 | `require_auth` | `bool` | `True` | Require authentication for all actions |
 | `search_fields` | `List[str]` | `None` | Default fields to search |
 | `query_field` | `str` | `"pk"` | Field to query by for `get_by_id` action |
+| `select_related` | `List[str]` | `None` | Foreign keys to eager load |
+| `prefetch_related` | `List[str]` | `None` | Relations to prefetch |
+| `allowed_fields` | `List[str]` | `None` | Fields allowed for query and output |
+| `include_total` | `bool` | `True` | Include `total_count` by default |
+
+Filters, ordering, field selection, search fields, and `query_field` are validated before they reach the ORM. Unknown fields are rejected. Relation traversal such as `author__name` is rejected unless `allow_relation_traversal = True`. Filter lookups are limited to safe lookups like `exact`, `icontains`, `in`, `gte`, `lte`, `range`, and `isnull`.
 
 ## Action Parameters
 
@@ -206,6 +216,7 @@ tool._run(
     offset=0,          # Pagination offset
     fields=None,       # Specific fields to return
     order_by=None,     # Order by fields (e.g., ["-created_at"])
+    include_total=True # Set False to skip the count query
 )
 ```
 
@@ -219,6 +230,7 @@ tool._run(
     offset=0,
     fields=None,
     order_by=["-created_at"],
+    include_total=True,
 )
 ```
 
@@ -255,6 +267,7 @@ tool._run(
     limit=10,
     fields=None,
     search_fields=["name", "description"],  # Fields to search
+    include_total=True,
 )
 ```
 
@@ -299,15 +312,20 @@ tool._run(
 ## Integration with Agents
 
 ```python
-from djgent import Agent, ModelQueryTool
+from djgent import Agent, ModelQueryTool, tool
 from products.models import Product
 
 # Create a product query tool
+@tool
 class ProductQueryTool(ModelQueryTool):
     name = "product_query"
     description = "Query products from the database"
     queryset = Product.objects.filter(active=True)
     require_auth = False
+
+# If this class lives in an installed app's tools.py, @tool registers it during
+# import. Undecorated Tool subclasses are also auto-registered when
+# DJGENT["AUTO_DISCOVER_TOOLS"] is True (default).
 
 # Create agent with the tool
 agent = Agent.create(
@@ -322,7 +340,7 @@ response = agent.run("Show me laptops under $1000")
 
 ## DjangoModelQueryTool
 
-The built-in `DjangoModelQueryTool` uses `ModelQueryTool` as its base class and provides dynamic model selection:
+The built-in `DjangoModelQueryTool` uses `ModelQueryTool` as its base class and provides dynamic model selection. It is best for admin/debug use. For production user flows, prefer a model-specific `ModelQueryTool` with a narrow queryset, Pydantic schema, and clear field allowlist.
 
 ```python
 from djgent.tools.builtin import DjangoModelQueryTool
@@ -357,13 +375,15 @@ tool._run(
 
 1. **Always exclude sensitive fields**: Use `exclude_fields` to hide passwords, tokens, etc.
 
-2. **Use `require_auth` appropriately**: Set to `False` only for public data.
+2. **Prefer Pydantic schemas for public/customer data**: Schemas make output explicit and keep nested data controlled.
 
-3. **Override `get_queryset()` for dynamic access**: Implement role-based filtering.
+3. **Use `require_auth` appropriately**: Set to `False` only for public data.
 
-4. **Set reasonable limits**: Prevent large result sets with `max_results`.
+4. **Override `get_queryset()` for dynamic access**: Implement role-based filtering.
 
-5. **Provide clear descriptions**: Help the agent understand when to use your tool.
+5. **Set reasonable limits and eager loading**: Use `max_results`, `select_related`, `prefetch_related`, and `include_total=False` for high-volume reads.
+
+6. **Provide clear descriptions**: Help the agent understand when to use your tool.
 
 ## Troubleshooting
 

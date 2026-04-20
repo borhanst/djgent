@@ -17,6 +17,7 @@ DJGENT = {
     "CHAT_UI": {
         "TITLE": "Support Copilot",
         "TOOLS": ["calculator", "datetime", "search"],
+        "AUTO_LOAD_TOOLS": True,
         "SYSTEM_PROMPT": "You are the support assistant for our product.",
         "BUBBLE_ENABLED": True,
         "BUBBLE_TITLE": "Ask Support",
@@ -61,6 +62,7 @@ class SupportChatView(BaseChatView):
     chat_title = "Support Chat"
     chat_subtitle = "Chat with the support agent."
     tools = ["calculator", "datetime", "search"]
+    auto_load_tools = True
     system_prompt = "You are the support assistant for our SaaS product."
 
     def build_agent(
@@ -75,8 +77,14 @@ class SupportChatView(BaseChatView):
             conversation_name="",
             user=self.get_active_user(request),
             system_prompt=self.get_system_prompt(),
+            auto_load_tools=self.get_auto_load_tools(),
         )
 ```
+
+`AUTO_LOAD_TOOLS` defaults to `True` for chat views, so tools registered with
+`@tool` or app `tools.py` auto-discovery are available to the chat agent without
+listing every tool in `CHAT_UI["TOOLS"]`. Set it to `False` when you want only
+the explicit `TOOLS` list.
 
 ### URL registration
 

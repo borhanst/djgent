@@ -21,6 +21,9 @@ DJGENT_DEFAULTS = {
         # Note: Sensitive fields (password, token, secret, card info, etc.) are ALWAYS excluded
         # regardless of this setting. This list adds additional exclusions.
         "EXCLUDE_FIELDS": [],
+        # Optional per-model field allowlist for the generic django_model tool.
+        # Example: {"blog.Post": ["id", "title", "status"]}
+        "ALLOWED_FIELDS": {},
     },
     # Authentication requirements for tools
     # Define which actions require authenticated users

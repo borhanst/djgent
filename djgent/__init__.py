@@ -72,7 +72,7 @@ from djgent.runtime import (
     StreamEvent,
 )
 from djgent.tools.base import ModelQueryTool, Tool
-from djgent.tools.decorators import tool
+from djgent.tools.decorators import register_tool, tool
 from djgent.tools.registry import ToolRegistry
 from djgent.tools.schemas import (
     AgentRunInput,
@@ -125,6 +125,7 @@ __all__ = [
     "Tool",
     "ModelQueryTool",
     "ToolRegistry",
+    "register_tool",
     "tool",
     # Schemas
     "AgentRunInput",

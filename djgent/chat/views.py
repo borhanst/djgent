@@ -56,6 +56,7 @@ class BaseChatView(ABC):
     input_placeholder = "Message Djgent..."
     system_prompt = DEFAULT_SYSTEM_PROMPT
     tools = ["calculator", "datetime"]
+    auto_load_tools = True
     agent_name = "djgent-chat"
 
     # Pagination / display limits
@@ -120,6 +121,9 @@ class BaseChatView(ABC):
 
     def get_tool_names(self) -> list[str]:
         return list(self.tools)
+
+    def get_auto_load_tools(self) -> bool:
+        return bool(self.auto_load_tools)
 
     def get_template_name(self) -> str:
         return self.template_name
@@ -440,6 +444,9 @@ class ConfiguredChatView(BaseChatView):
             "subtitle": chat_settings.get("SUBTITLE", self.chat_subtitle),
             "system_prompt": chat_settings.get("SYSTEM_PROMPT", BaseChatView.system_prompt),
             "tools": list(chat_settings.get("TOOLS", self.tools)),
+            "auto_load_tools": chat_settings.get(
+                "AUTO_LOAD_TOOLS", self.auto_load_tools
+            ),
             "welcome_message": chat_settings.get(
                 "WELCOME_MESSAGE", self.welcome_message
             ),
@@ -482,6 +489,9 @@ class ConfiguredChatView(BaseChatView):
     def get_tool_names(self) -> list[str]:
         return self.get_settings()["tools"]
 
+    def get_auto_load_tools(self) -> bool:
+        return bool(self.get_settings()["auto_load_tools"])
+
     def get_system_prompt(self) -> str:
         return self.get_settings()["system_prompt"]
 
@@ -497,6 +507,7 @@ class ConfiguredChatView(BaseChatView):
             conversation_name="",
             user=self.get_active_user(request),
             system_prompt=self.get_system_prompt(),
+            auto_load_tools=self.get_auto_load_tools(),
         )
 
 

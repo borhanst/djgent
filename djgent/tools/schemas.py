@@ -142,19 +142,44 @@ class HttpRequestInput(BaseModel):
 
 class DjangoModelQueryInput(BaseModel):
     """Input schema for Django model query tool."""
-    model_name: str = Field(description="Django model name")
-    operation: str = Field(description="Operation: create, read, update, delete, list")
+    action: str = Field(
+        description=(
+            "Action: list_models, get_schema, list, query, get_by_id, search, count"
+        )
+    )
+    model: Optional[str] = Field(
+        default=None,
+        description="Django model name as app_label.ModelName",
+    )
     filters: Optional[Dict[str, Any]] = Field(default=None, description="Query filters")
-    data: Optional[Dict[str, Any]] = Field(default=None, description="Data for create/update")
+    id: Optional[Union[int, str]] = Field(default=None, description="Object identifier")
+    search: Optional[str] = Field(default=None, description="Search term")
     limit: Optional[int] = Field(default=None, ge=1, le=1000, description="Result limit")
+    offset: int = Field(default=0, description="Result offset")
+    fields: Optional[List[str]] = Field(default=None, description="Fields to return")
     order_by: Optional[List[str]] = Field(default=None, description="Order by fields")
+    search_fields: Optional[List[str]] = Field(default=None, description="Fields to search")
+    query_field: Optional[str] = Field(default=None, description="Field used by get_by_id")
+    include_total: Optional[bool] = Field(
+        default=None,
+        description="Include total_count for list/query/search responses",
+    )
+    app: Optional[str] = Field(default=None, description="App label for list_models")
 
-    @field_validator('operation')
+    @field_validator('action')
     @classmethod
-    def validate_operation(cls, v: str) -> str:
-        allowed = {'create', 'read', 'update', 'delete', 'list'}
+    def validate_action(cls, v: str) -> str:
+        allowed = {
+            'list_models',
+            'get_schema',
+            'list',
+            'query',
+            'get_by_id',
+            'search',
+            'count',
+        }
         if v.lower() not in allowed:
-            raise ValueError(f"Operation must be one of {allowed}")
+            raise ValueError(f"Action must be one of {allowed}")
         return v.lower()
 
 

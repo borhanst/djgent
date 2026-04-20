@@ -167,6 +167,7 @@ DJGENT = {
     "CHAT_UI": {
         "TITLE": "Support Copilot",
         "TOOLS": ["calculator", "datetime", "search"],
+        "AUTO_LOAD_TOOLS": True,
         "SYSTEM_PROMPT": "You are the support assistant for our product.",
         "BUBBLE_ENABLED": True,
         "BUBBLE_TITLE": "Ask Support",
@@ -207,6 +208,7 @@ class SupportChatView(BaseChatView):
     chat_title = "Support Chat"
     system_prompt = "You are the support assistant for our product."
     tools = ["calculator", "datetime", "search"]
+    auto_load_tools = True
 
     def build_agent(
         self, request, conversation_id: Optional[str] = None
@@ -220,8 +222,14 @@ class SupportChatView(BaseChatView):
             conversation_name="",
             user=self.get_active_user(request),
             system_prompt=self.get_system_prompt(),
+            auto_load_tools=self.get_auto_load_tools(),
         )
 ```
+
+Chat views auto-load registered tools by default. A tool registered with
+`@tool` or app `tools.py` auto-discovery is available to the chat agent without
+adding its name to `CHAT_UI["TOOLS"]`; set
+`AUTO_LOAD_TOOLS=False` for explicit-only tool lists.
 
 Register it with:
 
@@ -241,7 +249,7 @@ See [Chat UI](docs/CHAT_UI.md) for the full subclassing guide.
 ### 4. Create Custom Tools
 
 ```python
-from djgent import tool
+from djgent import Tool, tool
 
 @tool
 def get_weather(city: str) -> str:
@@ -253,7 +261,20 @@ def get_weather(city: str) -> str:
 def greet_person(name: str) -> str:
     """Greet a person."""
     return f"Hello, {name}!"
+
+@tool
+class EchoTool(Tool):
+    name = "echo"
+    description = "Echo a message"
+
+    def _run(self, message: str) -> str:
+        return message
 ```
+
+Djgent auto-discovers tools from each installed app's `tools.py` when
+`DJGENT["AUTO_DISCOVER_TOOLS"]` is `True` (default). Function tools decorated
+with `@tool` self-register during import, and `Tool` subclasses with a `name`
+are registered automatically.
 
 ### 5. Create Model Query Tools (New!)
 
@@ -676,7 +697,7 @@ result = chain.execute("hello")
 | `search` | Web search using DuckDuckGo (no API key needed) |
 | `http` | Make HTTP requests to APIs |
 | `weather` | Get weather information (requires API key) |
-| `django_model` | Query any Django model (list, query, search, get_by_id) |
+| `django_model` | Read-only generic Django model queries for admin/debug workflows |
 | `django_auth` | Check user authentication, permissions, and groups |
 
 ### Model Query Tools
@@ -688,12 +709,15 @@ from djgent import ModelQueryTool
 
 class MyModelQueryTool(ModelQueryTool):
     name = "my_model_query"
-    queryset = MyModel.objects.all()
+    queryset = MyModel.objects.select_related("owner").all()
     exclude_fields = ["sensitive_field"]
+    allowed_fields = ["id", "name", "status", "owner"]
     require_auth = False  # Public access
 ```
 
 **Actions:** `list`, `query`, `get_by_id`, `search`, `count`
+
+Model query tools validate requested fields, filters, ordering, search fields, and `query_field` before ORM execution. Prefer app-specific `ModelQueryTool` classes over the generic `django_model` tool for production user-facing agents.
 
 See [docs/MODEL_QUERY_TOOL.md](docs/MODEL_QUERY_TOOL.md) for full documentation.
 
@@ -777,19 +801,22 @@ def another_tool(value: str) -> str:
 ### Tool Class
 
 ```python
-from djgent import Tool
+from djgent import Tool, tool
 
+@tool
 class MyCustomTool(Tool):
     name = "my_tool"
     description = "Does something useful"
 
     def _run(self, input: str) -> str:
         return f"Processed: {input}"
-
-# Register the tool
-from djgent.tools.registry import ToolRegistry
-ToolRegistry.register(name="my_tool")(MyCustomTool)
 ```
+
+Place this class in an installed app's `tools.py`. `@tool` registers functions
+and `Tool` subclasses during import. Without the decorator, Djgent can still
+auto-register `Tool` subclasses from `name = "my_tool"` when
+`AUTO_DISCOVER_TOOLS` is enabled. Manual `ToolRegistry.register(...)` also still
+works and wins over duplicate auto-discovery.
 
 ### ModelQueryTool Class
 
@@ -802,8 +829,9 @@ from myapp.models import MyModel
 class MyModelQueryTool(ModelQueryTool):
     name = "my_model_query"
     description = "Query my models"
-    queryset = MyModel.objects.all()
+    queryset = MyModel.objects.select_related("owner").all()
     exclude_fields = ["password", "secret"]  # Hide sensitive fields
+    allowed_fields = ["id", "name", "status", "owner"]
     require_auth = False  # Public access
     max_results = 100
     query_field = "pk"  # Field to query by (default: "pk")
@@ -817,6 +845,7 @@ agent = Agent.create(
 # Or use directly
 tool = MyModelQueryTool()
 tool._run(action="list", limit=10)
+tool._run(action="list", include_total=False)  # Skip total_count query
 tool._run(action="query", filters={"status": "active"})
 tool._run(action="get_by_id", id=42)  # Query by pk
 tool._run(action="get_by_id", id="my-slug", query_field="slug")  # Query by slug

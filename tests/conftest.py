@@ -11,6 +11,11 @@ import django
 import pytest
 from django.conf import settings
 
+ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
+EXAMPLE_DIR = os.path.join(ROOT_DIR, "example")
+if EXAMPLE_DIR not in sys.path:
+    sys.path.insert(0, EXAMPLE_DIR)
+
 # Configure Django settings for testing
 if not settings.configured:
     settings.configure(
@@ -28,6 +33,7 @@ if not settings.configured:
             'django.contrib.staticfiles',
             'djgent',
             'djgent.chat',
+            'demo_app',
         ],
         MIDDLEWARE=[
             'django.contrib.sessions.middleware.SessionMiddleware',

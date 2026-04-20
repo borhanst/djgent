@@ -6,6 +6,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.test import Client
 
+from djgent.chat.views import ConfiguredChatView
 from djgent.models import Conversation
 
 
@@ -125,6 +126,28 @@ class TestBuiltInChatUi:
         assert b"Other conversation" not in home_response.content
         assert own_response.status_code == 200
         assert other_response.status_code == 404
+
+    def test_configured_chat_auto_loads_registered_tools_by_default(
+        self, settings
+    ) -> None:
+        self._configure(settings)
+        request = Client().get("/").wsgi_request
+
+        with patch("djgent.chat.views.Agent.create") as create:
+            ConfiguredChatView().build_agent(request)
+
+        assert create.call_args.kwargs["tools"] == ["calculator", "datetime"]
+        assert create.call_args.kwargs["auto_load_tools"] is True
+
+    def test_configured_chat_can_disable_auto_load_tools(self, settings) -> None:
+        self._configure(settings)
+        settings.DJGENT["CHAT_UI"]["AUTO_LOAD_TOOLS"] = False
+        request = Client().get("/").wsgi_request
+
+        with patch("djgent.chat.views.Agent.create") as create:
+            ConfiguredChatView().build_agent(request)
+
+        assert create.call_args.kwargs["auto_load_tools"] is False
 
 
 @pytest.mark.django_db

@@ -1,9 +1,14 @@
 """Tool registry for managing and discovering tools."""
 
+import importlib
+import inspect
+import logging
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 from djgent.exceptions import RegistryError
 from djgent.tools.base import Tool
+
+logger = logging.getLogger(__name__)
 
 
 class ToolRegistry:
@@ -14,6 +19,7 @@ class ToolRegistry:
     """
 
     _tools: Dict[str, Union[Tool, Type[Tool], Callable]] = {}
+    _sources: Dict[str, str] = {}
     _discovered: bool = False
 
     @classmethod
@@ -21,6 +27,7 @@ class ToolRegistry:
         cls,
         name: Optional[str] = None,
         description: Optional[str] = None,
+        source: Optional[str] = None,
     ) -> Callable:
         """
         Decorator to register a tool function or class.
@@ -38,6 +45,8 @@ class ToolRegistry:
             tool_desc = description or (obj.__doc__ or "").strip().split("\n")[0]  # type: ignore
 
             cls._tools[tool_name] = obj
+            if source:
+                cls._sources[tool_name] = source
             return obj
 
         return decorator
@@ -98,6 +107,11 @@ class ToolRegistry:
         return list(cls._tools.keys())
 
     @classmethod
+    def get_tool_source(cls, name: str) -> Optional[str]:
+        """Return the module path that auto-registered a tool, if known."""
+        return cls._sources.get(name)
+
+    @classmethod
     def has_tool(cls, name: str) -> bool:
         """
         Check if a tool is registered.
@@ -124,16 +138,50 @@ class ToolRegistry:
         from django.apps import apps
 
         for app_config in apps.get_app_configs():
+            module_name = f"{app_config.name}.tools"
             try:
-                module_name = f"{app_config.name}.tools"
-                __import__(module_name)
-            except ImportError:
+                module = importlib.import_module(module_name)
+            except ModuleNotFoundError as exc:
+                if exc.name != module_name:
+                    raise
                 pass  # App doesn't have tools module
+            else:
+                cls._register_tools_from_module(module, source=module_name)
 
         cls._discovered = True
+
+    @classmethod
+    def _register_tools_from_module(cls, module: Any, *, source: str) -> None:
+        """Register Tool subclasses declared in a discovered tools module."""
+        for _, obj in inspect.getmembers(module, inspect.isclass):
+            if obj is Tool or not issubclass(obj, Tool):
+                continue
+
+            if obj.__module__ != module.__name__:
+                continue
+
+            tool_name = getattr(obj, "name", None)
+            if not isinstance(tool_name, str) or not tool_name.strip():
+                continue
+
+            if cls.has_tool(tool_name):
+                logger.debug(
+                    "Skipped auto-discovered tool '%s' from %s; already registered",
+                    tool_name,
+                    source,
+                )
+                continue
+
+            cls.register(name=tool_name, source=source)(obj)
+            logger.debug(
+                "Auto-discovered tool '%s' from %s",
+                tool_name,
+                source,
+            )
 
     @classmethod
     def clear(cls) -> None:
         """Clear all registered tools."""
         cls._tools.clear()
+        cls._sources.clear()
         cls._discovered = False

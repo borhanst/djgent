@@ -7,8 +7,9 @@ AGENT_NAME = "example-chat"
 SYSTEM_PROMPT = (
     "You are the example chat assistant for a Django demo project. "
     "Be concise, helpful, and use available tools when calculations or "
-    "date/time questions come up. If the runtime is not configured for a "
-    "working LLM provider, explain that clearly."
+    "date/time questions come up. Use the book_query tool for questions "
+    "about demo books, authors, genres, or publication years. If the runtime "
+    "is not configured for a working LLM provider, explain that clearly."
 )
 
 
@@ -37,6 +38,7 @@ class ExampleChatView(BaseChatView):
             conversation_name="",
             user=self.get_active_user(request),
             system_prompt=self.get_system_prompt(),
+            auto_load_tools=self.get_auto_load_tools(),
         )
 
 

@@ -6,6 +6,7 @@ from django.conf import settings
 from django.db.models import QuerySet
 
 from djgent.tools.base import ModelQueryTool
+from djgent.tools.schemas import DjangoModelQueryInput
 from djgent.utils.model_introspection import (
     get_all_models,
     get_model_by_name,
@@ -51,7 +52,8 @@ class DjangoModelQueryTool(ModelQueryTool):
 
     name = "django_model"
     description = """
-    Query Django models dynamically. Actions:
+    Query Django models dynamically for admin/debug read-only use. Prefer
+    model-specific ModelQueryTool classes in production apps. Actions:
     - list_models: List available models (anonymous OK)
     - get_schema: Get model field schema (anonymous OK)
     - list: List objects from a model (requires auth)
@@ -63,6 +65,7 @@ class DjangoModelQueryTool(ModelQueryTool):
     Use this tool to query data from any Django model in the database.
     Anonymous users can only list models and view schemas for public models.
     """
+    args_schema = DjangoModelQueryInput
     risk_level = "high"
     requires_approval = True
     approval_reason = "Dynamic model queries can expose database records."
@@ -91,11 +94,13 @@ class DjangoModelQueryTool(ModelQueryTool):
         filters: Optional[Dict[str, Any]] = None,
         id: Optional[Union[int, str]] = None,
         search: Optional[str] = None,
-        limit: int = 10,
+        limit: Optional[int] = None,
         offset: int = 0,
         fields: Optional[List[str]] = None,
         order_by: Optional[List[str]] = None,
         search_fields: Optional[List[str]] = None,
+        query_field: Optional[str] = None,
+        include_total: Optional[bool] = None,
         app: Optional[str] = None,
         runtime: Optional[Any] = None,
         **kwargs: Any,
@@ -121,6 +126,11 @@ class DjangoModelQueryTool(ModelQueryTool):
         Returns:
             JSON-formatted string with results
         """
+        config = self._get_config()
+        self.max_results = int(config.get("MAX_RESULTS", self.max_results))
+        self.default_limit = int(config.get("DEFAULT_LIMIT", self.default_limit))
+        self.exclude_fields = list(config.get("EXCLUDE_FIELDS", []))
+
         # Handle custom actions that don't use base class
         if action == "list_models":
             return self._list_models(app=app, runtime=runtime)
@@ -129,6 +139,7 @@ class DjangoModelQueryTool(ModelQueryTool):
 
         # For other actions, set the model and use base class implementation
         self._current_model = model
+        self.allowed_fields = self._get_allowed_fields_for_model(model)
         return super()._run(
             action=action,
             filters=filters,
@@ -139,6 +150,8 @@ class DjangoModelQueryTool(ModelQueryTool):
             fields=fields,
             order_by=order_by,
             search_fields=search_fields,
+            query_field=query_field,
+            include_total=include_total,
             runtime=runtime,
             **kwargs,
         )
@@ -186,6 +199,19 @@ class DjangoModelQueryTool(ModelQueryTool):
             raise ValueError(f"Model '{self._current_model}' not found")
 
         return model_class.objects.all()
+
+    def _get_allowed_fields_for_model(
+        self, model: Optional[str]
+    ) -> Optional[List[str]]:
+        """Return per-model field allowlist for generic queries."""
+        if not model:
+            return None
+
+        allowed_fields = self._get_config().get("ALLOWED_FIELDS", {})
+        if isinstance(allowed_fields, dict):
+            fields = allowed_fields.get(model)
+            return list(fields) if fields is not None else None
+        return None
 
     def _list_models(
         self,
@@ -293,16 +319,25 @@ class DjangoModelQueryTool(ModelQueryTool):
         schema = get_model_schema(model_class)
 
         # Get allowed fields for this model (for anonymous users)
-        allowed_fields = None
+        allowed_fields = self._get_allowed_fields_for_model(model)
         if not is_authenticated:
             from djgent.utils.public_models import get_public_model_fields
-            allowed_fields = get_public_model_fields(model)
+            public_fields = get_public_model_fields(model)
+            if allowed_fields is None:
+                allowed_fields = public_fields
+            elif public_fields is not None:
+                allowed_fields = [
+                    field for field in allowed_fields if field in public_fields
+                ]
 
         # Format fields
         fields_list = []
         for field in schema.fields:
+            if field.reverse:
+                continue
+
             # Filter fields for anonymous users if configured
-            if not is_authenticated and allowed_fields is not None:
+            if allowed_fields is not None:
                 if field.name not in allowed_fields:
                     continue
 
@@ -339,8 +374,16 @@ class DjangoModelQueryTool(ModelQueryTool):
 
     def _get_config(self) -> Dict[str, Any]:
         """Get tool configuration from Django settings."""
+        defaults = {
+            "ALLOWED_MODELS": [],
+            "EXCLUDED_MODELS": [],
+            "MAX_RESULTS": self.max_results,
+            "DEFAULT_LIMIT": self.default_limit,
+            "EXCLUDE_FIELDS": [],
+            "ALLOWED_FIELDS": {},
+        }
         djgent_settings = getattr(settings, "DJGENT", {})
-        return djgent_settings.get("MODEL_QUERY_TOOL", {})
+        return {**defaults, **djgent_settings.get("MODEL_QUERY_TOOL", {})}
 
     def _query(
         self,

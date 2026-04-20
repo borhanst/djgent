@@ -90,9 +90,13 @@ DJGENT = {
         "BUBBLE_TITLE": "Ask Djgent",
         "TITLE": "Djgent Chat",
         "TOOLS": ["calculator", "datetime"],
+        "SYSTEM_PROMPT": (
+            "You are the Djgent demo assistant. Use book_query for questions "
+            "about demo books, authors, genres, or publication years."
+        ),
     },
     "MODEL_QUERY_TOOL": {
-        "ENABLED": True,
+        "ENABLED": False,
         "ALLOWED_MODELS": [
             "demo_app.Book",
             "demo_app.Author",
@@ -101,6 +105,7 @@ DJGENT = {
         "DEFAULT_LIMIT": 10,
         "MAX_RESULTS": 100,
         "EXCLUDE_FIELDS": [],
+        "ALLOWED_FIELDS": {},
     },
     "PUBLIC_MODELS": {
         "demo_app.Book": ["id", "title", "genre", "published_year", "author"],

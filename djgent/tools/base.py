@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Union
 
+from django.core.exceptions import FieldDoesNotExist
+from django.db import models
 from django.db.models import Model, QuerySet
 from django.utils.encoding import force_str
 from django.utils.functional import Promise
@@ -303,6 +305,38 @@ class ModelQueryTool(Tool, ABC):
     # Optional schema used to shape serialized output
     schema: Optional[Any] = None
 
+    # Optional eager loading for model-specific tools
+    select_related: Optional[List[str]] = None
+    prefetch_related: Optional[List[str]] = None
+
+    # Optional allowlist of serialized/queryable fields
+    allowed_fields: Optional[List[str]] = None
+
+    # Include total_count in list/query/search responses
+    include_total: bool = True
+
+    # Safe lookup suffixes accepted in filters
+    safe_lookups = {
+        "exact",
+        "iexact",
+        "contains",
+        "icontains",
+        "in",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "range",
+        "isnull",
+        "startswith",
+        "istartswith",
+        "endswith",
+        "iendswith",
+    }
+
+    # Keep relation traversal off by default to avoid broad accidental joins
+    allow_relation_traversal: bool = False
+
     # ===== Main Entry Point =====
 
     def _run(
@@ -311,12 +345,13 @@ class ModelQueryTool(Tool, ABC):
         filters: Optional[Dict[str, Any]] = None,
         id: Optional[Union[int, str]] = None,
         search: Optional[str] = None,
-        limit: int = 10,
+        limit: Optional[int] = None,
         offset: int = 0,
         fields: Optional[List[str]] = None,
         order_by: Optional[List[str]] = None,
         search_fields: Optional[List[str]] = None,
         query_field: Optional[str] = None,
+        include_total: Optional[bool] = None,
         runtime: Optional[Any] = None,
         **kwargs: Any,
     ) -> str:
@@ -352,24 +387,38 @@ class ModelQueryTool(Tool, ABC):
                 "Authentication required. Please log in to access this feature."
             )
 
-        # Get user and queryset
-        user = self._get_user(runtime)
-        queryset = self.get_queryset(runtime=runtime, user=user, **kwargs)
-
-        # Enforce limits
-        limit = min(limit, self.max_results)
-
         try:
+            user = self._get_user(runtime)
+            queryset = self.get_queryset(runtime=runtime, user=user, **kwargs)
+            queryset = self._apply_eager_loading(queryset)
+            limit = self._normalize_limit(limit)
+            offset = self._normalize_offset(offset)
+            include_total = (
+                self.include_total if include_total is None else bool(include_total)
+            )
+
             if action == "list":
+                self._validate_read_options(
+                    queryset.model,
+                    fields=fields,
+                    order_by=order_by,
+                )
                 return self._list(
                     queryset=queryset,
                     limit=limit,
                     offset=offset,
                     fields=fields,
                     order_by=order_by,
+                    include_total=include_total,
                     runtime=runtime,
                 )
             elif action == "query":
+                self._validate_read_options(
+                    queryset.model,
+                    filters=filters,
+                    fields=fields,
+                    order_by=order_by,
+                )
                 return self._query(
                     queryset=queryset,
                     filters=filters,
@@ -377,9 +426,14 @@ class ModelQueryTool(Tool, ABC):
                     offset=offset,
                     fields=fields,
                     order_by=order_by,
+                    include_total=include_total,
                     runtime=runtime,
                 )
             elif action == "get_by_id":
+                self._validate_query_field(
+                    queryset.model, query_field or self.query_field or "pk"
+                )
+                self._validate_read_options(queryset.model, fields=fields)
                 return self._get_by_id(
                     queryset=queryset,
                     id=id,
@@ -388,15 +442,22 @@ class ModelQueryTool(Tool, ABC):
                     runtime=runtime,
                 )
             elif action == "search":
+                self._validate_read_options(
+                    queryset.model,
+                    fields=fields,
+                    search_fields=search_fields or self.search_fields,
+                )
                 return self._search(
                     queryset=queryset,
                     search=search,
                     limit=limit,
                     fields=fields,
                     search_fields=search_fields or self.search_fields,
+                    include_total=include_total,
                     runtime=runtime,
                 )
             elif action == "count":
+                self._validate_read_options(queryset.model, filters=filters)
                 return self._count(
                     queryset=queryset,
                     filters=filters,
@@ -452,6 +513,7 @@ class ModelQueryTool(Tool, ABC):
         offset: int = 0,
         fields: Optional[List[str]] = None,
         order_by: Optional[List[str]] = None,
+        include_total: bool = True,
         **kwargs: Any,
     ) -> str:
         """
@@ -471,8 +533,7 @@ class ModelQueryTool(Tool, ABC):
         if order_by:
             queryset = queryset.order_by(*order_by)
 
-        # Get total count
-        total_count = queryset.count()
+        total_count = queryset.count() if include_total else None
 
         # Apply pagination
         queryset = queryset[offset : offset + limit]
@@ -483,10 +544,10 @@ class ModelQueryTool(Tool, ABC):
         return self._success_response(
             action="list",
             count=len(data),
-            total_count=total_count,
             limit=limit,
             offset=offset,
             data=data,
+            **({"total_count": total_count} if include_total else {}),
         )
 
     def _query(
@@ -497,6 +558,7 @@ class ModelQueryTool(Tool, ABC):
         offset: int = 0,
         fields: Optional[List[str]] = None,
         order_by: Optional[List[str]] = None,
+        include_total: bool = True,
         **kwargs: Any,
     ) -> str:
         """
@@ -521,8 +583,7 @@ class ModelQueryTool(Tool, ABC):
         if order_by:
             queryset = queryset.order_by(*order_by)
 
-        # Get total count
-        total_count = queryset.count()
+        total_count = queryset.count() if include_total else None
 
         # Apply pagination
         queryset = queryset[offset : offset + limit]
@@ -533,11 +594,11 @@ class ModelQueryTool(Tool, ABC):
         return self._success_response(
             action="query",
             count=len(data),
-            total_count=total_count,
             limit=limit,
             offset=offset,
             filters=filters,
             data=data,
+            **({"total_count": total_count} if include_total else {}),
         )
 
     def _get_by_id(
@@ -595,6 +656,7 @@ class ModelQueryTool(Tool, ABC):
         limit: int = 10,
         fields: Optional[List[str]] = None,
         search_fields: Optional[List[str]] = None,
+        include_total: bool = True,
         **kwargs: Any,
     ) -> str:
         """
@@ -618,8 +680,7 @@ class ModelQueryTool(Tool, ABC):
             queryset, search, search_fields, queryset.model
         )
 
-        # Get total count
-        total_count = queryset.count()
+        total_count = queryset.count() if include_total else None
 
         # Apply limit
         queryset = queryset[:limit]
@@ -630,10 +691,10 @@ class ModelQueryTool(Tool, ABC):
         return self._success_response(
             action="search",
             count=len(data),
-            total_count=total_count,
             search_term=search,
             search_fields=search_fields,
             data=data,
+            **({"total_count": total_count} if include_total else {}),
         )
 
     def _count(
@@ -663,6 +724,133 @@ class ModelQueryTool(Tool, ABC):
 
     # ===== Helper Methods =====
 
+    def _normalize_limit(self, limit: Optional[int]) -> int:
+        """Apply default and maximum result limits."""
+        if limit is None:
+            limit = self.default_limit
+        try:
+            limit = int(limit)
+        except (TypeError, ValueError):
+            limit = self.default_limit
+        return max(1, min(limit, self.max_results))
+
+    def _normalize_offset(self, offset: int) -> int:
+        """Clamp invalid offsets to the first page."""
+        try:
+            offset = int(offset)
+        except (TypeError, ValueError):
+            return 0
+        return max(0, offset)
+
+    def _apply_eager_loading(self, queryset: QuerySet) -> QuerySet:
+        """Apply optional eager loading declared by a model-specific tool."""
+        if self.select_related:
+            queryset = queryset.select_related(*self.select_related)
+        if self.prefetch_related:
+            queryset = queryset.prefetch_related(*self.prefetch_related)
+        return queryset
+
+    def _validate_read_options(
+        self,
+        model_class: type[Model],
+        *,
+        filters: Optional[Dict[str, Any]] = None,
+        fields: Optional[List[str]] = None,
+        order_by: Optional[List[str]] = None,
+        search_fields: Optional[List[str]] = None,
+    ) -> None:
+        """Validate model query options before they reach the ORM."""
+        for expression in filters or {}:
+            self._validate_filter_expression(model_class, expression)
+
+        for field_name in fields or []:
+            self._validate_model_field(model_class, field_name, purpose="fields")
+
+        for field_name in order_by or []:
+            self._validate_model_field(
+                model_class, field_name.lstrip("-"), purpose="order_by"
+            )
+
+        for field_name in search_fields or []:
+            self._validate_model_field(
+                model_class,
+                field_name,
+                purpose="search_fields",
+                text_only=True,
+            )
+
+    def _validate_filter_expression(
+        self, model_class: type[Model], expression: str
+    ) -> None:
+        parts = expression.split("__")
+        field_name = parts[0]
+        self._validate_model_field(model_class, field_name, purpose="filters")
+
+        if len(parts) == 1:
+            return
+
+        if len(parts) == 2 and parts[1] in self.safe_lookups:
+            return
+
+        if self.allow_relation_traversal:
+            return
+
+        raise ValueError(
+            f"Invalid filter '{expression}'. Relation traversal is disabled and "
+            f"lookup must be one of {sorted(self.safe_lookups)}."
+        )
+
+    def _validate_query_field(
+        self, model_class: type[Model], field_name: str
+    ) -> None:
+        if "__" in field_name:
+            raise ValueError("query_field cannot use relation traversal or lookups")
+        self._validate_model_field(model_class, field_name, purpose="query_field")
+
+    def _validate_model_field(
+        self,
+        model_class: type[Model],
+        field_name: str,
+        *,
+        purpose: str,
+        text_only: bool = False,
+    ) -> None:
+        if field_name == "pk":
+            field_name = model_class._meta.pk.name
+
+        if self.allowed_fields is not None and field_name not in self.allowed_fields:
+            raise ValueError(
+                f"Field '{field_name}' is not allowed for {purpose}."
+            )
+
+        field = self._get_model_field(model_class, field_name)
+        if field is None:
+            raise ValueError(
+                f"Unknown field '{field_name}' for {model_class.__name__}."
+            )
+
+        if getattr(field, "auto_created", False) and not getattr(
+            field, "concrete", False
+        ):
+            raise ValueError(f"Reverse relation '{field_name}' is not allowed.")
+
+        if getattr(field, "many_to_many", False):
+            raise ValueError(f"Many-to-many field '{field_name}' is not allowed.")
+
+        if text_only and not isinstance(field, (models.CharField, models.TextField)):
+            raise ValueError(f"Field '{field_name}' is not searchable text.")
+
+    def _get_model_field(
+        self, model_class: type[Model], field_name: str
+    ) -> Optional[models.Field]:
+        try:
+            return model_class._meta.get_field(field_name)
+        except FieldDoesNotExist:
+            for field in model_class._meta.fields:
+                if getattr(field, "attname", None) == field_name:
+                    return field
+        return None
+
     def _queryset_to_dict(
         self,
         queryset: QuerySet,
@@ -688,6 +876,12 @@ class ModelQueryTool(Tool, ABC):
         Returns:
             Dict representation of the model
         """
+        if self.allowed_fields is not None:
+            if fields is None:
+                fields = list(self.allowed_fields)
+            else:
+                fields = [field for field in fields if field in self.allowed_fields]
+
         if self.schema is not None:
             if not is_pydantic_model_class(self.schema):
                 raise ValueError(

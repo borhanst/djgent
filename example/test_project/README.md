@@ -59,10 +59,16 @@ print(book_tool._run(action="get_by_id", id=1))
 The `book_query` example tool is defined in `example/demo_app/tools.py` and uses:
 
 ```python
+from djgent import ModelQueryTool, tool
+
+@tool
 class BookQueryTool(ModelQueryTool):
+    name = "book_query"
     queryset = Book.objects.select_related("author").all()
     require_auth = False
     schema = BookSchema
 ```
 
-Only the fields declared on `BookSchema` are returned.
+Because `AUTO_DISCOVER_TOOLS` is enabled by default, Djgent imports
+`demo_app.tools`; `@tool` registers the class during import. Only the fields
+declared on `BookSchema` are returned.

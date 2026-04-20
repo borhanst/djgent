@@ -2,14 +2,34 @@
 
 from __future__ import annotations
 
+import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 from langchain_core.messages import HumanMessage, AIMessage
 
 from djgent.tools.base import Tool
+from djgent.tools.decorators import register_tool, tool
 from djgent.tools.registry import ToolRegistry
 from djgent.retrieval.tools import RetrievalTool, KnowledgeIngestTool
+
+
+@pytest.fixture
+def isolated_tool_registry():
+    """Temporarily isolate ToolRegistry state for auto-discovery tests."""
+    original_tools = ToolRegistry._tools.copy()
+    original_sources = ToolRegistry._sources.copy()
+    original_discovered = ToolRegistry._discovered
+    ToolRegistry.clear()
+    sys.modules.pop("tests.auto_tools_app.tools", None)
+    try:
+        yield
+    finally:
+        ToolRegistry._tools = original_tools
+        ToolRegistry._sources = original_sources
+        ToolRegistry._discovered = original_discovered
+        sys.modules.pop("tests.auto_tools_app.tools", None)
 
 
 class TestTool:
@@ -92,6 +112,124 @@ class TestToolRegistry:
         """Test checking if tool exists."""
         assert ToolRegistry.has_tool("calculator") is True
         assert ToolRegistry.has_tool("nonexistent") is False
+
+    def test_example_book_tool_auto_discovered(self) -> None:
+        """Test example ModelQueryTool class is auto-discovered."""
+        tool = ToolRegistry.get_tool_instance("book_query")
+
+        assert isinstance(tool, Tool)
+        assert tool.name == "book_query"
+
+    def test_auto_discover_registers_tool_subclasses(
+        self, isolated_tool_registry, monkeypatch
+    ) -> None:
+        """Test auto-discovery registers Tool subclasses from tools.py."""
+        from django.apps import apps
+
+        monkeypatch.setattr(
+            apps,
+            "get_app_configs",
+            lambda: [SimpleNamespace(name="tests.auto_tools_app")],
+        )
+
+        ToolRegistry.auto_discover()
+
+        tool = ToolRegistry.get_tool_instance("auto_discovered_tool")
+        assert isinstance(tool, Tool)
+        assert tool.run() == "auto"
+        assert ToolRegistry.get_tool_source(
+            "auto_discovered_tool"
+        ) == "tests.auto_tools_app.tools"
+
+    def test_auto_discover_skips_duplicates_and_non_tools(
+        self, isolated_tool_registry, monkeypatch
+    ) -> None:
+        """Test manual registrations win and non-tool classes are ignored."""
+        from django.apps import apps
+
+        class ManualDuplicateTool(Tool):
+            name = "duplicate_tool"
+            description = "Manual duplicate"
+
+            def _run(self) -> str:
+                return "manual duplicate"
+
+        ToolRegistry.register(name="duplicate_tool")(ManualDuplicateTool)
+        monkeypatch.setattr(
+            apps,
+            "get_app_configs",
+            lambda: [SimpleNamespace(name="tests.auto_tools_app")],
+        )
+
+        ToolRegistry.auto_discover()
+
+        duplicate = ToolRegistry.get_tool_instance("duplicate_tool")
+        assert duplicate.run() == "manual duplicate"
+        assert ToolRegistry.has_tool("not_a_tool") is False
+
+    def test_auto_discover_keeps_decorated_function_tools(
+        self, isolated_tool_registry, monkeypatch
+    ) -> None:
+        """Test @tool functions still self-register during auto-discovery."""
+        from django.apps import apps
+
+        monkeypatch.setattr(
+            apps,
+            "get_app_configs",
+            lambda: [SimpleNamespace(name="tests.auto_tools_app")],
+        )
+
+        ToolRegistry.auto_discover()
+
+        tool = ToolRegistry.get_tool_instance("decorated_auto_function")
+        assert tool.run() == "decorated"
+
+    def test_tool_decorator_registers_tool_class(
+        self, isolated_tool_registry
+    ) -> None:
+        """Test @tool registers Tool subclasses."""
+
+        @tool
+        class DecoratedClassTool(Tool):
+            name = "decorated_class_tool"
+            description = "Decorated class tool"
+
+            def _run(self, value: str) -> str:
+                return value.upper()
+
+        tool_instance = ToolRegistry.get_tool_instance("decorated_class_tool")
+        assert isinstance(tool_instance, DecoratedClassTool)
+        assert tool_instance.run("hello") == "HELLO"
+
+    def test_tool_decorator_registers_tool_class_with_override(
+        self, isolated_tool_registry
+    ) -> None:
+        """Test @tool can register Tool subclasses with name/description override."""
+
+        @tool(name="tool_decorated_class", description="Override description")
+        class ToolDecoratedClass(Tool):
+            name = "original_name"
+            description = "Original description"
+
+            def _run(self) -> str:
+                return self.description
+
+        assert ToolDecoratedClass.description == "Override description"
+        tool_instance = ToolRegistry.get_tool_instance("tool_decorated_class")
+        assert isinstance(tool_instance, ToolDecoratedClass)
+        assert tool_instance.run() == "Override description"
+
+    def test_register_tool_alias_uses_tool_decorator(
+        self, isolated_tool_registry
+    ) -> None:
+        """Test old register_tool import remains compatible."""
+
+        @register_tool(name="legacy_decorated_function")
+        def legacy_function() -> str:
+            return "legacy"
+
+        tool_instance = ToolRegistry.get_tool_instance("legacy_decorated_function")
+        assert tool_instance.run() == "legacy"
 
 
 class TestRetrievalTool:
