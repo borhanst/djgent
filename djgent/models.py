@@ -318,11 +318,19 @@ class AuditLog(models.Model):
     class Meta:
         ordering = ['-timestamp']
         indexes = [
-            models.Index(fields=['agent_name', 'timestamp']),
-            models.Index(fields=['user_id', 'timestamp']),
-            models.Index(fields=['conversation_id', 'timestamp']),
+            models.Index(
+                fields=['agent_name', 'timestamp'],
+                name='djgent_audit_agent_ts_idx',
+            ),
+            models.Index(
+                fields=['user_id', 'timestamp'],
+                name='djgent_audit_user_ts_idx',
+            ),
+            models.Index(
+                fields=['conversation_id', 'timestamp'],
+                name='djgent_audit_conv_ts_idx',
+            ),
         ]
 
     def __str__(self) -> str:
         return f"{self.event_type} - {self.agent_name} - {self.timestamp}"
-

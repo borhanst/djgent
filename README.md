@@ -2,10 +2,10 @@
 
 **Django AI Agent Framework** - Build AI agents with LangChain integration in Django applications.
 
-[![PyPI](https://img.shields.io/pypi/v/djgent.svg)](https://test.pypi.org/simple/ djgent)
+[![PyPI](https://img.shields.io/pypi/v/djgent.svg)](https://pypi.org/project/djgent/)
 [![GitHub](https://img.shields.io/github/license/borhanst/djgent)](https://github.com/borhanst/djgent/blob/main/LICENSE)
 [![Python Support](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Django Support](https://img.shields.io/badge/Django-5.2+-green.svg)](https://www.djangoproject.com/)
+[![Django Support](https://img.shields.io/badge/Django-5.2%20%7C%206.0-green.svg)](https://www.djangoproject.com/)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 
 ## Features
@@ -1087,11 +1087,11 @@ uv build
 ### Publishing to PyPI
 
 ```bash
-# Publish using uv
-uv publish --token pypi-YOUR-API-TOKEN
+# Publish to TestPyPI first
+uv publish --publish-url https://test.pypi.org/legacy/ --token pypi-YOUR-TESTPYPI-TOKEN dist/djgent-0.3.0.tar.gz dist/djgent-0.3.0-py3-none-any.whl
 
-# Or publish to TestPyPI first
-uv publish --token pypi-YOUR-TOKEN --url https://test.pypi.org/legacy/
+# Publish to PyPI after TestPyPI install verification
+uv publish --token pypi-YOUR-PYPI-TOKEN dist/djgent-0.3.0.tar.gz dist/djgent-0.3.0-py3-none-any.whl
 ```
 
 ## License
@@ -1110,45 +1110,22 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Changelog
 
-### 0.3.0 (2026-03-14)
+### 0.3.0 (2026-04-20)
+- Initial PyPI release of djgent
+- Agent creation with LangChain/LangGraph integration
+- Multi-LLM provider support
+- Built-in tools and custom `@tool` decorator support
+- Built-in chat UI with persistent conversations
+- In-memory, database-backed, and long-term memory support
+- Retrieval/knowledge-base tools and MCP tool loading
+- `ModelQueryTool` for safe model-backed database querying
 - Added rate limiting with `RateLimitMiddleware`
 - Added audit logging with `AuditLogger` and `AuditLog` model
 - Added response caching with `ResponseCache` and `CacheMiddleware`
 - Added Pydantic input validation schemas in `djgent.tools.schemas`
 - Added `Chain` class for sequential tool/agent execution
 - Added runtime schemas (`StreamEvent`, `ApprovalRequest`, `AgentResult`)
-- Restructured audit, cache, chains to single files (audit.py, cache.py, chains.py)
 - Added tests for agent, tools, and memory modules
-- Fixed various bug fixes and improvements
-
-### 0.2.0 (2026-03-06)
-- Added persistent conversation memory with Django models
-- Added `Conversation` and `Message` models for chat history
-- Added database-backed memory backend (`DatabaseMemory`)
-- Updated `Agent` class with `memory_backend` parameter
-- Added conversation management commands:
-  - `djgent_list_conversations` - List conversations
-  - `djgent_create_conversation` - Create new conversation
-  - `djgent_export_conversation` - Export conversation to JSON
-  - `djgent_clear_conversations` - Clear old conversations
-- Added Django admin interface for conversations
-- Added memory utility functions (`get_conversation`, `create_conversation`, etc.)
-- Added `ModelQueryTool` base class for easy database querying
-- Added `get_queryset()` method for dynamic queryset customization
-- Updated `DjangoModelQueryTool` to use new `ModelQueryTool` base
-- Added `django_auth` tool for authentication checks
-- Added public model registration for anonymous access
-- Enhanced authentication support with `runtime` parameter
-
-### 0.0.3 (2026-03-04)
-- Initial release
-- Agent creation with LangChain integration
-- Multi-LLM provider support
-- Built-in tools (calculator, datetime, search, HTTP, weather)
-- Custom tool creation with @tool decorator
-- Tool auto-discovery
-- Conversation memory
-- Django system checks
 
 ## Links
 

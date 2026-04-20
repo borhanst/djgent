@@ -176,7 +176,10 @@ def check_djent_tools(app_configs, **kwargs) -> List[Warning]:
     try:
         from djgent.tools.registry import ToolRegistry
 
-        expected_tools = ["calculator", "datetime", "search"]
+        djgent_settings = getattr(settings, "DJGENT", {})
+        expected_tools = djgent_settings.get(
+            "BUILTIN_TOOLS", ["calculator", "datetime"]
+        )
         registered_tools = ToolRegistry.list_tools()
 
         for tool_name in expected_tools:

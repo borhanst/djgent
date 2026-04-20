@@ -34,14 +34,14 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='auditlog',
-            index=models.Index(fields=['agent_name', 'timestamp'], name='djgent_audit_agent_ti_fc8e5d_idx'),
+            index=models.Index(fields=['agent_name', 'timestamp'], name='djgent_audit_agent_ts_idx'),
         ),
         migrations.AddIndex(
             model_name='auditlog',
-            index=models.Index(fields=['user_id', 'timestamp'], name='djgent_audit_user_id_7a8b6c_idx'),
+            index=models.Index(fields=['user_id', 'timestamp'], name='djgent_audit_user_ts_idx'),
         ),
         migrations.AddIndex(
             model_name='auditlog',
-            index=models.Index(fields=['conversation_id', 'timestamp'], name='djgent_audit_convers_9d4e3f_idx'),
+            index=models.Index(fields=['conversation_id', 'timestamp'], name='djgent_audit_conv_ts_idx'),
         ),
     ]
