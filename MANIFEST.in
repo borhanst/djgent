@@ -1,0 +1,10 @@
+include README.md
+include LICENSE
+include pyproject.toml
+include CHANGELOG.md
+recursive-include djgent *.py
+recursive-include djgent/templates *.html
+recursive-include djgent/static *.css *.js
+recursive-exclude djgent __pycache__
+recursive-exclude djgent *.pyc
+recursive-exclude djgent *.pyo

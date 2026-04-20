@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }}</title>
+    {% load static %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'djgent/chat.css' %}">
+</head>
+<body class="chat-page" data-theme="light">
+    <div class="app-shell">
+        <button class="sidebar-toggle" type="button" aria-label="Toggle sidebar" data-sidebar-toggle>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9h16.5m-16.5 6.75h16.5" />
+            </svg>
+        </button>
+        <div class="sidebar-overlay" data-sidebar-overlay></div>
+
+        <aside class="app-sidebar" data-sidebar>
+            <div class="sidebar-header">
+                <a class="brand" href="{{ chat_base_url }}">
+                    <span class="brand-icon">D</span>
+                    <span class="brand-text">
+                        <strong>{{ chat_title }}</strong>
+                        <span>{{ chat_subtitle }}</span>
+                    </span>
+                </a>
+                <button class="new-chat-btn" type="button" data-action="new-chat">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    New chat
+                </button>
+            </div>
+
+            <div class="conversations">
+                <div class="section-label">Recent chats</div>
+                <div id="conversation-list" class="conversation-list">
+                    {% for conversation in conversations %}
+                        <a
+                            class="conversation-item {% if selected_conversation and selected_conversation.id == conversation.id %}is-active{% endif %}"
+                            href="{{ conversation_path_prefix }}{{ conversation.id }}/"
+                            data-conversation-id="{{ conversation.id }}"
+                        >
+                            <strong>{{ conversation.name }}</strong>
+                            <span>{{ conversation.preview }}</span>
+                        </a>
+                    {% empty %}
+                        <p class="empty-state">Your chat history will<br>appear here.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </aside>
+
+        {% include "djgent/_chat_stage.html" %}
+    </div>
+
+    {{ initial_messages|json_script:"initial-messages" }}
+    {{ conversations|json_script:"initial-conversations" }}
+    {{ welcome_message|json_script:"welcome-message-data" }}
+    <script>
+        window.djgentChatConfig = {
+            chatApiUrl: "{{ chat_api_url }}",
+            newChatUrl: "{{ new_chat_url }}",
+            chatBaseUrl: "{{ chat_base_url }}",
+            conversationPathPrefix: "{{ conversation_path_prefix }}",
+            historyUpdatesEnabled: {{ history_updates_enabled|yesno:"true,false" }},
+            selectedConversationId: "{% if selected_conversation %}{{ selected_conversation.id }}{% endif %}"
+        };
+    </script>
+    <script src="{% static 'djgent/chat.js' %}"></script>
+</body>
+</html>

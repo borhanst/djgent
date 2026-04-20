@@ -1,0 +1,31 @@
+{% extends "demo_app/base.html" %}
+
+{% block title %}Djgent Demo Home{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <p class="eyebrow">Example project</p>
+    <h1>Site-wide Djgent chat bubble</h1>
+    <p class="muted">
+        This page demonstrates the built-in bubble on a normal app page while the
+        dedicated chat UI still lives at the `/chat/` route.
+    </p>
+</section>
+
+<section class="card-grid">
+    {% for book in featured_books %}
+        <article>
+            <p class="eyebrow">Book</p>
+            <h2>{{ book.title }}</h2>
+            <p class="muted">{{ book.author.name }} · {{ book.genre }} · {{ book.published_year }}</p>
+        </article>
+    {% endfor %}
+    {% for author in authors %}
+        <article>
+            <p class="eyebrow">Author</p>
+            <h2>{{ author.name }}</h2>
+            <p class="muted">{{ author.country }}</p>
+        </article>
+    {% endfor %}
+</section>
+{% endblock %}

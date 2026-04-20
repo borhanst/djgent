@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ chat_title }}</title>
+    {% load static %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'djgent/chat.css' %}">
+</head>
+<body class="chat-page chat-embed-page" data-theme="light">
+    <div class="chat-embed-shell">
+        {% include "djgent/_chat_stage.html" %}
+    </div>
+
+    {{ initial_messages|json_script:"initial-messages" }}
+    {{ conversations|json_script:"initial-conversations" }}
+    {{ welcome_message|json_script:"welcome-message-data" }}
+    <script>
+        window.djgentChatConfig = {
+            chatApiUrl: "{{ chat_api_url }}",
+            newChatUrl: "{{ new_chat_url }}",
+            chatBaseUrl: "{{ chat_base_url }}",
+            conversationPathPrefix: "{{ conversation_path_prefix }}",
+            historyUpdatesEnabled: {{ history_updates_enabled|yesno:"true,false" }},
+            selectedConversationId: "{% if selected_conversation %}{{ selected_conversation.id }}{% endif %}"
+        };
+    </script>
+    <script src="{% static 'djgent/chat.js' %}"></script>
+</body>
+</html>

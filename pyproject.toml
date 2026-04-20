@@ -1,0 +1,153 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "djgent"
+version = "0.3.0"
+description = "Django AI Agent Framework - Build AI agents with LangChain integration in Django"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Borhan", email = "mdborhan.st@gmail.com"}
+]
+maintainers = [
+    {name = "Borhan", email = "mdborhan.st@gmail.com"}
+]
+keywords = [
+    "django",
+    "ai",
+    "agent",
+    "langchain",
+    "langgraph",
+    "llm",
+    "openai",
+    "anthropic",
+    "google",
+    "gemini",
+    "groq",
+    "ollama",
+    "machine-learning",
+    "chatbot",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: Django",
+    "Framework :: Django :: 5.2",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = ">=3.11"
+dependencies = [
+    "django>=5.2",
+    "langchain>=0.3.0",
+    "langchain-core>=0.3.0",
+    "langgraph>=1.0.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+openai = [
+    "langchain-openai>=0.3.0",
+]
+anthropic = [
+    "langchain-anthropic>=0.3.0",
+]
+google = [
+    "langchain-google-genai>=0.3.0",
+]
+groq = [
+    "langchain-groq>=0.3.0",
+]
+ollama = [
+    "langchain-ollama>=0.3.0",
+]
+search = [
+    "langchain-community>=0.3.0",
+    "duckduckgo-search>=8.0.0",
+]
+http = [
+    "httpx>=0.28.0",
+]
+mcp = [
+    "langchain-mcp-adapters>=0.1.0",
+]
+all = [
+    "langchain-openai>=0.3.0",
+    "langchain-anthropic>=0.3.0",
+    "langchain-google-genai>=0.3.0",
+    "langchain-groq>=0.3.0",
+    "langchain-ollama>=0.3.0",
+    "langchain-community>=0.3.0",
+    "duckduckgo-search>=8.0.0",
+    "httpx>=0.28.0",
+    "langchain-mcp-adapters>=0.1.0",
+]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-django>=4.8.0",
+    "black>=24.0.0",
+    "ruff>=0.5.0",
+    "build>=1.0.0",
+    "twine>=5.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/borhanst/djgent"
+Documentation = "https://github.com/borhanst/djgent#readme"
+Repository = "https://github.com/borhanst/djgent.git"
+Issues = "https://github.com/borhanst/djgent/issues"
+Changelog = "https://github.com/borhanst/djgent/blob/main/CHANGELOG.md"
+
+[tool.hatch.build]
+include = [
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "pyproject.toml",
+    "djgent/**/*.py",
+    "djgent/**/*.html",
+    "djgent/**/*.css",
+    "djgent/**/*.js",
+    "djgent/py.typed",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["djgent*"]
+
+[tool.setuptools.package-data]
+djgent = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ['py311', 'py312', 'py313']
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-django>=4.12.0",
+]

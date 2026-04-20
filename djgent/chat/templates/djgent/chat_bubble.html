@@ -1,0 +1,65 @@
+{% if enabled %}
+{% load static %}
+<link rel="stylesheet" href="{% static 'djgent/chat_bubble.css' %}">
+<div
+    class="djgent-chat-bubble djgent-chat-bubble--{{ bubble_position }}"
+    data-djgent-chat-bubble
+    style="--djgent-chat-panel-width: {{ bubble_panel_width }}; --djgent-chat-panel-mobile-height: {{ bubble_panel_mobile_height }};"
+>
+    <button
+        type="button"
+        class="djgent-chat-bubble__launcher"
+        data-djgent-chat-open
+        aria-label="{{ bubble_label }}"
+        aria-expanded="false"
+        aria-controls="djgent-chat-panel"
+    >
+        <span class="djgent-chat-bubble__icon" aria-hidden="true">D</span>
+        <span class="djgent-chat-bubble__text">{{ bubble_title }}</span>
+    </button>
+
+    <div class="djgent-chat-bubble__overlay" data-djgent-chat-overlay hidden></div>
+    <aside
+        id="djgent-chat-panel"
+        class="djgent-chat-bubble__panel"
+        data-djgent-chat-panel
+        hidden
+        inert
+        aria-hidden="true"
+    >
+        <header class="djgent-chat-bubble__header">
+            <div>
+                <p class="djgent-chat-bubble__eyebrow">Djgent</p>
+                <h2>{{ bubble_title }}</h2>
+            </div>
+            <div class="djgent-chat-bubble__header-actions">
+                <button
+                    type="button"
+                    class="djgent-chat-bubble__theme"
+                    data-theme-toggle
+                    aria-label="Toggle dark mode"
+                    title="Toggle dark mode"
+                >
+                    <span class="djgent-chat-bubble__theme-icon" data-theme-icon aria-hidden="true">◐</span>
+                </button>
+                <button
+                    type="button"
+                    class="djgent-chat-bubble__close"
+                    data-djgent-chat-close
+                    aria-label="Close chat"
+                >
+                    ×
+                </button>
+            </div>
+        </header>
+        <iframe
+            class="djgent-chat-bubble__frame"
+            data-djgent-chat-frame
+            data-src="{{ iframe_url }}"
+            title="{{ bubble_title }}"
+            loading="lazy"
+        ></iframe>
+    </aside>
+</div>
+<script src="{% static 'djgent/chat_bubble.js' %}"></script>
+{% endif %}

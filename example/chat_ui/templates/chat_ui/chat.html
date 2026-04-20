@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }}</title>
+    {% load static %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'chat_ui/chat.css' %}">
+</head>
+<body>
+    <div class="shell">
+        <aside class="sidebar">
+            <div class="brand">
+                <p class="eyebrow">Example</p>
+                <h1>Djgent Chat</h1>
+                <p class="subtitle">A Django chat surface backed by the local <code>djgent</code> package.</p>
+            </div>
+
+            <div class="sidebar-actions">
+                <button class="ghost-button" type="button" data-action="new-chat">New chat</button>
+            </div>
+
+            <div class="conversation-list">
+                <div class="section-heading">
+                    <span>Recent chats</span>
+                </div>
+                <div id="conversation-list">
+                    {% for conversation in conversations %}
+                        <a
+                            class="conversation-item {% if selected_conversation and selected_conversation.id == conversation.id %}is-active{% endif %}"
+                            href="/chat/{{ conversation.id }}/"
+                            data-conversation-id="{{ conversation.id }}"
+                        >
+                            <strong>{{ conversation.name }}</strong>
+                            <span>{{ conversation.preview }}</span>
+                        </a>
+                    {% empty %}
+                        <p class="empty-state">Your chat history will appear here.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </aside>
+
+        <main class="chat-panel">
+            <header class="chat-header">
+                <div>
+                    <p class="eyebrow">Conversation</p>
+                    <h2 id="chat-title">
+                        {% if selected_conversation %}{{ selected_conversation.name }}{% else %}New conversation{% endif %}
+                    </h2>
+                </div>
+                <p class="chat-hint">Tools enabled: calculator, datetime</p>
+            </header>
+
+            <section id="messages" class="messages" aria-live="polite"></section>
+
+            <form id="chat-form" class="composer">
+                {% csrf_token %}
+                <input type="hidden" id="conversation-id" value="{% if selected_conversation %}{{ selected_conversation.id }}{% endif %}">
+                <div class="composer-box">
+                    <label class="sr-only" for="message-input">Message</label>
+                    <textarea id="message-input" name="message" rows="1" placeholder="Ask for calculations, current date/time, or general help." required></textarea>
+                    <button type="submit" class="send-button" aria-label="Send message">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                            <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="composer-actions">
+                    <p class="composer-note">Shift+Enter for a new line.</p>
+                </div>
+            </form>
+        </main>
+    </div>
+
+    {{ initialMessages|json_script:"initial-messages" }}
+    {{ conversations|json_script:"initial-conversations" }}
+    <script>
+        window.djgentChatConfig = {
+            chatApiUrl: "{{ chat_api_url }}",
+            newChatUrl: "{{ new_chat_url }}",
+            selectedConversationId: "{% if selected_conversation %}{{ selected_conversation.id }}{% endif %}"
+        };
+    </script>
+    <script src="{% static 'chat_ui/chat.js' %}"></script>
+</body>
+</html>

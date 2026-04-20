@@ -1,0 +1,45 @@
+<div class="chat-stage {% if is_embed %}is-embed{% endif %}">
+    <header class="chat-header">
+        <div class="chat-header-left">
+            <span class="chat-eyebrow">{% if is_embed %}Djgent widget{% else %}Assistant{% endif %}</span>
+            <div class="chat-title-row">
+                <h1 id="chat-title">
+                    {% if selected_conversation %}{{ selected_conversation.name }}{% else %}New conversation{% endif %}
+                </h1>
+            </div>
+        </div>
+        <div class="chat-header-right">
+            {% if not is_embed %}
+                <button type="button" class="theme-toggle" data-theme-toggle aria-label="Toggle dark mode" title="Toggle theme">
+                    <span data-theme-icon aria-hidden="true">☾</span>
+                </button>
+            {% endif %}
+        </div>
+    </header>
+
+    <section id="messages" class="message-stream" aria-live="polite"></section>
+
+    <form id="chat-form" class="composer-panel">
+        {% csrf_token %}
+        <input type="hidden" id="conversation-id" value="{% if selected_conversation %}{{ selected_conversation.id }}{% endif %}">
+        <div class="composer-inner">
+            <label class="sr-only" for="message-input">Message</label>
+            <div class="composer-box">
+                <textarea id="message-input" name="message" rows="1" placeholder="{% if is_embed %}Message Djgent...{% else %}Message Assistant...{% endif %}" required></textarea>
+                <button type="submit" class="send-btn" aria-label="Send message">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+                    </svg>
+                </button>
+            </div>
+            <div class="composer-footer">
+                <p id="composer-note" class="composer-note">AI can make mistakes. Check important info.</p>
+                <div class="composer-actions">
+                    {% if not is_embed %}
+                        <button class="btn-ghost" type="button" data-action="new-chat">+ New chat</button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
