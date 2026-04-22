@@ -200,9 +200,7 @@ class DjangoModelQueryTool(ModelQueryTool):
 
         return model_class.objects.all()
 
-    def _get_allowed_fields_for_model(
-        self, model: Optional[str]
-    ) -> Optional[List[str]]:
+    def _get_allowed_fields_for_model(self, model: Optional[str]) -> Optional[List[str]]:
         """Return per-model field allowlist for generic queries."""
         if not model:
             return None
@@ -232,10 +230,7 @@ class DjangoModelQueryTool(ModelQueryTool):
 
         # Filter by app if specified
         if app:
-            all_models = {
-                name: info for name, info in all_models.items()
-                if info.app_label == app
-            }
+            all_models = {name: info for name, info in all_models.items() if info.app_label == app}
 
         # Check if user is authenticated
         is_authenticated = self._check_authenticated(runtime)
@@ -243,12 +238,12 @@ class DjangoModelQueryTool(ModelQueryTool):
         # If not authenticated, filter to only PUBLIC_MODELS
         if not is_authenticated:
             from djgent.utils.public_models import get_public_models
+
             public_models = get_public_models()
 
             if public_models:
                 all_models = {
-                    name: info for name, info in all_models.items()
-                    if name in public_models
+                    name: info for name, info in all_models.items() if name in public_models
                 }
             else:
                 all_models = {}
@@ -256,12 +251,14 @@ class DjangoModelQueryTool(ModelQueryTool):
         # Format response
         models_list = []
         for full_name, info in all_models.items():
-            models_list.append({
-                "name": full_name,
-                "verbose_name": info.verbose_name,
-                "verbose_name_plural": info.verbose_name_plural,
-                "field_count": len(info.fields),
-            })
+            models_list.append(
+                {
+                    "name": full_name,
+                    "verbose_name": info.verbose_name,
+                    "verbose_name_plural": info.verbose_name_plural,
+                    "field_count": len(info.fields),
+                }
+            )
 
         response = {
             "action": "list_models",
@@ -281,9 +278,7 @@ class DjangoModelQueryTool(ModelQueryTool):
         config = self._get_config()
 
         if not model:
-            return self._error_response(
-                "Model name is required for get_schema action"
-            )
+            return self._error_response("Model name is required for get_schema action")
 
         # Validate access
         is_allowed, error_msg = validate_model_access(
@@ -300,6 +295,7 @@ class DjangoModelQueryTool(ModelQueryTool):
         # If not authenticated, check PUBLIC_MODELS
         if not is_authenticated:
             from djgent.utils.public_models import get_public_models
+
             public_models = get_public_models()
 
             if public_models and model not in public_models:
@@ -308,9 +304,7 @@ class DjangoModelQueryTool(ModelQueryTool):
                     "Authentication required to view schema."
                 )
             elif not public_models:
-                return self._error_response(
-                    "Authentication required to view model schema."
-                )
+                return self._error_response("Authentication required to view model schema.")
 
         model_class = get_model_by_name(model)
         if not model_class:
@@ -322,13 +316,12 @@ class DjangoModelQueryTool(ModelQueryTool):
         allowed_fields = self._get_allowed_fields_for_model(model)
         if not is_authenticated:
             from djgent.utils.public_models import get_public_model_fields
+
             public_fields = get_public_model_fields(model)
             if allowed_fields is None:
                 allowed_fields = public_fields
             elif public_fields is not None:
-                allowed_fields = [
-                    field for field in allowed_fields if field in public_fields
-                ]
+                allowed_fields = [field for field in allowed_fields if field in public_fields]
 
         # Format fields
         fields_list = []

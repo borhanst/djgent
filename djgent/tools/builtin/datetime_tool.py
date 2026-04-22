@@ -1,7 +1,7 @@
 """Date and time utility tool."""
 
 from datetime import datetime
-from typing import Optional, Union
+from typing import Optional
 
 from djgent.tools.base import Tool
 

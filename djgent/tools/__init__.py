@@ -16,8 +16,8 @@ from djgent.tools.schemas import (
     SearchInput,
     ToolExecutionContext,
     ToolExecutionInput,
-    validate_tool_input,
     WeatherInput,
+    validate_tool_input,
 )
 
 __all__ = [

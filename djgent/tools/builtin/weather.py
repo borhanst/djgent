@@ -1,8 +1,7 @@
 """Weather tool using Open-Meteo API (free, no API key)."""
 
-from typing import Optional
-
 import httpx
+
 from djgent.tools.base import Tool
 
 
@@ -14,7 +13,10 @@ class WeatherTool(Tool):
     """
 
     name = "weather"
-    description = "Get current weather for a city. Use for weather questions like 'What is the weather in Dhaka?'"
+    description = (
+        "Get current weather for a city. Use for weather questions like "
+        "'What is the weather in Dhaka?'"
+    )
 
     def _run(self, city: str) -> str:
         """

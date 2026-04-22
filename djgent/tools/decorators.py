@@ -8,7 +8,9 @@ from djgent.tools.base import Tool
 class _FunctionTool(Tool):
     """Wrapper for function-based tools."""
 
-    def __init__(self, func: Callable, name: Optional[str] = None, description: Optional[str] = None):
+    def __init__(
+        self, func: Callable, name: Optional[str] = None, description: Optional[str] = None
+    ):
         self._func = func
         self.name = name or func.__name__
         self.description = description or (func.__doc__ or "").strip().split("\n")[0]

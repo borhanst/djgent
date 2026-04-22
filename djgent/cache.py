@@ -145,10 +145,7 @@ class ResponseCache:
 
         with self._lock:
             # Evict if at capacity
-            if (
-                len(self._memory_store) >= self.max_entries
-                and key not in self._memory_store
-            ):
+            if len(self._memory_store) >= self.max_entries and key not in self._memory_store:
                 self._evict_oldest()
 
             self._memory_store[key] = entry
@@ -304,11 +301,7 @@ class ResponseCache:
         """Get cache statistics."""
         with self._lock:
             total_requests = self._stats["hits"] + self._stats["misses"]
-            hit_rate = (
-                self._stats["hits"] / total_requests
-                if total_requests > 0
-                else 0.0
-            )
+            hit_rate = self._stats["hits"] / total_requests if total_requests > 0 else 0.0
 
             return {
                 "hits": self._stats["hits"],

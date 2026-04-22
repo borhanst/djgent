@@ -1,7 +1,7 @@
 """Authentication check tool for verifying user login status."""
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from django.conf import settings
 from django.utils.encoding import force_str
@@ -25,7 +25,7 @@ class DjangoAuthTool(Tool):
     Authentication:
     - check_auth, list_permissions, list_groups: Available to anonymous users
     - get_user, check_permission, check_group: Require authenticated user
-    
+
     Note: When used with Django request context (via ToolRuntime), the tool
     automatically uses request.user. Otherwise, provide user_id or session_key.
     """
@@ -128,7 +128,9 @@ class DjangoAuthTool(Tool):
                     )
 
                 if action == "get_user":
-                    return self._get_user_details(user_id=user_id, session_key=session_key, runtime=runtime)
+                    return self._get_user_details(
+                        user_id=user_id, session_key=session_key, runtime=runtime
+                    )
                 elif action == "check_permission":
                     if not permission:
                         return self._error_response(
@@ -142,9 +144,7 @@ class DjangoAuthTool(Tool):
                     )
                 elif action == "check_group":
                     if not group:
-                        return self._error_response(
-                            "group is required for check_group action"
-                        )
+                        return self._error_response("group is required for check_group action")
                     return self._check_group(
                         user_id=user_id,
                         session_key=session_key,
@@ -164,8 +164,7 @@ class DjangoAuthTool(Tool):
 
         try:
             session = Session.objects.filter(
-                session_key=session_key,
-                expire_date__gt=timezone.now()
+                session_key=session_key, expire_date__gt=timezone.now()
             ).first()
 
             if not session:
@@ -173,12 +172,13 @@ class DjangoAuthTool(Tool):
 
             # Get user_id from session data
             session_data = session.get_decoded()
-            user_id = session_data.get('_auth_user_id')
+            user_id = session_data.get("_auth_user_id")
 
             if not user_id:
                 return None
 
             from django.contrib.auth import get_user_model
+
             User = get_user_model()
             return User.objects.get(pk=user_id)
 
@@ -210,9 +210,9 @@ class DjangoAuthTool(Tool):
             # Check if we have Django context with authenticated user
             django_ctx = self._get_django_context(runtime)
             if django_ctx:
-                is_auth = getattr(django_ctx, 'is_authenticated', False)
-                user = getattr(django_ctx, 'user', None)
-        
+                is_auth = getattr(django_ctx, "is_authenticated", False)
+                user = getattr(django_ctx, "user", None)
+
         # Fallback to user_id or session_key if no runtime context
         if not user and session_key:
             user = self._get_user_from_session(session_key)
@@ -252,8 +252,8 @@ class DjangoAuthTool(Tool):
         # Priority: runtime context > user_id > session_key
         if runtime:
             django_ctx = self._get_django_context(runtime)
-            if django_ctx and getattr(django_ctx, 'is_authenticated', False):
-                user = getattr(django_ctx, 'user', None)
+            if django_ctx and getattr(django_ctx, "is_authenticated", False):
+                user = getattr(django_ctx, "user", None)
                 # Ensure user is not a string
                 if isinstance(user, str):
                     user = None
@@ -302,19 +302,18 @@ class DjangoAuthTool(Tool):
     def _get_user_fields_config(self) -> list:
         """
         Get configured user fields from Django settings.
-        
+
         Returns:
             List of field names to include in get_user response
         """
-        from django.conf import settings
-        
+
         djgent_settings = getattr(settings, "DJGENT", {})
         user_fields = djgent_settings.get("USER_FIELDS", ["first_name", "last_name", "full_name"])
-        
+
         # Ensure we always have at least some fields
         if not user_fields:
             return ["first_name", "last_name", "full_name"]
-        
+
         return user_fields
 
     def _check_permission(
@@ -384,23 +383,22 @@ class DjangoAuthTool(Tool):
     def _list_permissions(self, app_label: Optional[str] = None) -> str:
         """List all available permissions."""
         from django.contrib.auth.models import Permission
-        from django.contrib.contenttypes.models import ContentType
 
         permissions_qs = Permission.objects.all()
 
         if app_label:
-            permissions_qs = permissions_qs.filter(
-                content_type__app_label=app_label
-            )
+            permissions_qs = permissions_qs.filter(content_type__app_label=app_label)
 
         permissions_list = []
         for perm in permissions_qs.select_related("content_type"):
-            permissions_list.append({
-                "codename": perm.codename,
-                "name": perm.name,
-                "app_label": perm.content_type.app_label,
-                "model": perm.content_type.model,
-            })
+            permissions_list.append(
+                {
+                    "codename": perm.codename,
+                    "name": perm.name,
+                    "app_label": perm.content_type.app_label,
+                    "model": perm.content_type.model,
+                }
+            )
 
         response = {
             "action": "list_permissions",
@@ -417,10 +415,12 @@ class DjangoAuthTool(Tool):
 
         groups_list = []
         for group in Group.objects.all():
-            groups_list.append({
-                "id": group.id,
-                "name": group.name,
-            })
+            groups_list.append(
+                {
+                    "id": group.id,
+                    "name": group.name,
+                }
+            )
 
         response = {
             "action": "list_groups",
@@ -432,10 +432,14 @@ class DjangoAuthTool(Tool):
 
     def _error_response(self, error: str) -> str:
         """Format an error response."""
-        return json.dumps({
-            "success": False,
-            "error": error,
-        }, indent=2, cls=DjangoAuthJSONEncoder)
+        return json.dumps(
+            {
+                "success": False,
+                "error": error,
+            },
+            indent=2,
+            cls=DjangoAuthJSONEncoder,
+        )
 
 
 class DjangoAuthJSONEncoder(json.JSONEncoder):

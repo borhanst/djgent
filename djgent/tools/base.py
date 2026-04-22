@@ -39,12 +39,12 @@ class Tool(ABC):
 
     Tools are functions that agents can use to interact with the world.
     Each tool must have a name, description, and implement the _run method.
-    
+
     Supports LangChain's ToolRuntime for accessing Django context:
-    
+
     Example:
         from langchain.tools import ToolRuntime
-        
+
         class MyTool(Tool):
             def _run(self, arg: str, runtime: Optional[ToolRuntime] = None):
                 # Get Django context
@@ -83,13 +83,13 @@ class Tool(ABC):
     def _get_django_context(self, runtime: Any = None) -> Optional[Any]:
         """
         Extract Django context from ToolRuntime.
-        
+
         Args:
             runtime: LangChain ToolRuntime object (optional)
-            
+
         Returns:
             DjangoContext instance or None if not available
-            
+
         Example:
             def _run(self, query: str, runtime: Optional[ToolRuntime] = None):
                 django_ctx = self._get_django_context(runtime)
@@ -100,7 +100,7 @@ class Tool(ABC):
             return None
 
         try:
-            context = getattr(runtime, 'context', None)
+            context = getattr(runtime, "context", None)
             if context and isinstance(context, dict):
                 return context.get("django")
         except Exception:
@@ -111,31 +111,31 @@ class Tool(ABC):
     def _check_authenticated(self, runtime: Any = None) -> bool:
         """
         Check if the current user is authenticated.
-        
+
         Args:
             runtime: LangChain ToolRuntime object (optional)
-            
+
         Returns:
             True if user is authenticated, False otherwise
         """
         django_ctx = self._get_django_context(runtime)
         if django_ctx:
-            return getattr(django_ctx, 'is_authenticated', False)
+            return getattr(django_ctx, "is_authenticated", False)
         return False
 
     def _get_user(self, runtime: Any = None) -> Optional[Any]:
         """
         Get the current user from Django context.
-        
+
         Args:
             runtime: LangChain ToolRuntime object (optional)
-            
+
         Returns:
             Django User object or None if not authenticated
         """
         django_ctx = self._get_django_context(runtime)
-        if django_ctx and getattr(django_ctx, 'is_authenticated', False):
-            return getattr(django_ctx, 'user', None)
+        if django_ctx and getattr(django_ctx, "is_authenticated", False):
+            return getattr(django_ctx, "user", None)
         return None
 
     def run(self, *args: Any, **kwargs: Any) -> Any:
@@ -393,9 +393,7 @@ class ModelQueryTool(Tool, ABC):
             queryset = self._apply_eager_loading(queryset)
             limit = self._normalize_limit(limit)
             offset = self._normalize_offset(offset)
-            include_total = (
-                self.include_total if include_total is None else bool(include_total)
-            )
+            include_total = self.include_total if include_total is None else bool(include_total)
 
             if action == "list":
                 self._validate_read_options(
@@ -430,9 +428,7 @@ class ModelQueryTool(Tool, ABC):
                     runtime=runtime,
                 )
             elif action == "get_by_id":
-                self._validate_query_field(
-                    queryset.model, query_field or self.query_field or "pk"
-                )
+                self._validate_query_field(queryset.model, query_field or self.query_field or "pk")
                 self._validate_read_options(queryset.model, fields=fields)
                 return self._get_by_id(
                     queryset=queryset,
@@ -676,9 +672,7 @@ class ModelQueryTool(Tool, ABC):
             return self._error_response("Search term is required for search action")
 
         # Apply search using shared utility
-        queryset = model_search_util(
-            queryset, search, search_fields, queryset.model
-        )
+        queryset = model_search_util(queryset, search, search_fields, queryset.model)
 
         total_count = queryset.count() if include_total else None
 
@@ -767,9 +761,7 @@ class ModelQueryTool(Tool, ABC):
             self._validate_model_field(model_class, field_name, purpose="fields")
 
         for field_name in order_by or []:
-            self._validate_model_field(
-                model_class, field_name.lstrip("-"), purpose="order_by"
-            )
+            self._validate_model_field(model_class, field_name.lstrip("-"), purpose="order_by")
 
         for field_name in search_fields or []:
             self._validate_model_field(
@@ -779,9 +771,7 @@ class ModelQueryTool(Tool, ABC):
                 text_only=True,
             )
 
-    def _validate_filter_expression(
-        self, model_class: type[Model], expression: str
-    ) -> None:
+    def _validate_filter_expression(self, model_class: type[Model], expression: str) -> None:
         parts = expression.split("__")
         field_name = parts[0]
         self._validate_model_field(model_class, field_name, purpose="filters")
@@ -800,9 +790,7 @@ class ModelQueryTool(Tool, ABC):
             f"lookup must be one of {sorted(self.safe_lookups)}."
         )
 
-    def _validate_query_field(
-        self, model_class: type[Model], field_name: str
-    ) -> None:
+    def _validate_query_field(self, model_class: type[Model], field_name: str) -> None:
         if "__" in field_name:
             raise ValueError("query_field cannot use relation traversal or lookups")
         self._validate_model_field(model_class, field_name, purpose="query_field")
@@ -819,19 +807,13 @@ class ModelQueryTool(Tool, ABC):
             field_name = model_class._meta.pk.name
 
         if self.allowed_fields is not None and field_name not in self.allowed_fields:
-            raise ValueError(
-                f"Field '{field_name}' is not allowed for {purpose}."
-            )
+            raise ValueError(f"Field '{field_name}' is not allowed for {purpose}.")
 
         field = self._get_model_field(model_class, field_name)
         if field is None:
-            raise ValueError(
-                f"Unknown field '{field_name}' for {model_class.__name__}."
-            )
+            raise ValueError(f"Unknown field '{field_name}' for {model_class.__name__}.")
 
-        if getattr(field, "auto_created", False) and not getattr(
-            field, "concrete", False
-        ):
+        if getattr(field, "auto_created", False) and not getattr(field, "concrete", False):
             raise ValueError(f"Reverse relation '{field_name}' is not allowed.")
 
         if getattr(field, "many_to_many", False):
@@ -840,9 +822,7 @@ class ModelQueryTool(Tool, ABC):
         if text_only and not isinstance(field, (models.CharField, models.TextField)):
             raise ValueError(f"Field '{field_name}' is not searchable text.")
 
-    def _get_model_field(
-        self, model_class: type[Model], field_name: str
-    ) -> Optional[models.Field]:
+    def _get_model_field(self, model_class: type[Model], field_name: str) -> Optional[models.Field]:
         try:
             return model_class._meta.get_field(field_name)
         except FieldDoesNotExist:
@@ -857,9 +837,7 @@ class ModelQueryTool(Tool, ABC):
         fields: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """Convert a queryset to a list of dicts."""
-        return [
-            self._model_to_dict(obj, fields=fields) for obj in queryset
-        ]
+        return [self._model_to_dict(obj, fields=fields) for obj in queryset]
 
     def _model_to_dict(
         self,

@@ -35,7 +35,10 @@ def merge_settings() -> Dict[str, Any]:
 
     # Deep merge API_KEYS
     if "API_KEYS" in user_settings:
-        merged["API_KEYS"] = {**DJGENT_DEFAULTS.get("API_KEYS", {}), **user_settings.get("API_KEYS", {})}
+        merged["API_KEYS"] = {
+            **DJGENT_DEFAULTS.get("API_KEYS", {}),
+            **user_settings.get("API_KEYS", {}),
+        }
 
     return merged
 

@@ -25,19 +25,19 @@ Example:
 For more information, see: https://github.com/borhanst/djgent
 """
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 __author__ = "Borhan"
 __author_email__ = "mdborhan.st@gmail.com"
 __license__ = "MIT"
 __url__ = "https://github.com/borhanst/djgent"
-__description__ = (
-    "Django AI Agent Framework - Build AI agents with LangChain integration"
-)
+__description__ = "Django AI Agent Framework - Build AI agents with LangChain integration"
 
 from djgent.agents.base import Agent
 
-# Audit module - import directly when needed: from djgent.audit import AuditLogger, audit_logger
-# Cache module - import directly when needed: from djgent.cache import CacheMiddleware, ResponseCache
+# Audit module - import directly when needed:
+# from djgent.audit import AuditLogger, audit_logger
+# Cache module - import directly when needed:
+# from djgent.cache import CacheMiddleware, ResponseCache
 from djgent.exceptions import (
     AgentError,
     ConfigurationError,

@@ -14,7 +14,11 @@ class SearchTool(Tool):
     """
 
     name = "search"
-    description = "Search the web using DuckDuckGo. Use this tool for weather information, current events, news, recent information, facts about people/places/things, or any information you don't know or need to verify."
+    description = (
+        "Search the web using DuckDuckGo. Use this tool for weather information, "
+        "current events, news, recent information, facts about people/places/things, "
+        "or any information you don't know or need to verify."
+    )
 
     def __init__(self, **kwargs: Any):
         """Initialize the search tool with LangChain's DuckDuckGoSearchResults."""
@@ -60,15 +64,9 @@ class SearchTool(Tool):
                 for i, result in enumerate(results, 1):
                     title = result.get("title", "No title")
                     url = result.get("link", result.get("url", "No URL"))
-                    snippet = result.get(
-                        "snippet", result.get("body", "No description")
-                    )
-                    formatted.append(
-                        f"{i}. {title}\n   URL: {url}\n   {snippet}"
-                    )
-                return f"Search results for '{query}':\n\n" + "\n\n".join(
-                    formatted
-                )
+                    snippet = result.get("snippet", result.get("body", "No description"))
+                    formatted.append(f"{i}. {title}\n   URL: {url}\n   {snippet}")
+                return f"Search results for '{query}':\n\n" + "\n\n".join(formatted)
             else:
                 # Fallback for string results
                 return f"Search results for '{query}':\n{results}"

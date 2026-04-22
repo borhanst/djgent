@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "djgent"
-version = "0.3.0"
+version = "0.3.1"
 description = "Django AI Agent Framework - Build AI agents with LangChain integration in Django"
 readme = "README.md"
 license = "MIT"

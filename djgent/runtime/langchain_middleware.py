@@ -20,9 +20,7 @@ MIDDLEWARE_CLASS_MAP = {
 }
 
 
-def _deep_merge(
-    base: Dict[str, Any], override: Dict[str, Any]
-) -> Dict[str, Any]:
+def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
     """Deep merge dictionaries without mutating either input."""
     merged = deepcopy(base)
     for key, value in override.items():
@@ -66,9 +64,7 @@ def _load_middleware_class(class_name: str) -> Any:
     try:
         return getattr(lc_middleware, class_name)
     except AttributeError as exc:
-        raise ConfigurationError(
-            f"Installed LangChain does not provide '{class_name}'."
-        ) from exc
+        raise ConfigurationError(f"Installed LangChain does not provide '{class_name}'.") from exc
 
 
 def resolve_langchain_middleware_config(

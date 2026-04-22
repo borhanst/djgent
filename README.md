@@ -29,7 +29,6 @@
 - 🛡️ **Rate Limiting** - Protect agents from abuse with configurable rate limits
 - 📋 **Audit Logging** - Track all agent operations with persistent audit logs
 - 💨 **Response Caching** - Cache LLM responses to reduce costs and latency
-- ⛓️ **Chains** - Sequential execution of tools and agents
 - 🔎 **Input Validation** - Pydantic-based validation for all tool inputs
 
 ## Documentation
@@ -669,7 +668,7 @@ knowledge_input = KnowledgeRetrievalInput(
 | `datetime` | Get current date/time, format dates, calculate differences |
 | `search` | Web search using DuckDuckGo (no API key needed) |
 | `http` | Make HTTP requests to APIs |
-| `weather` | Get weather information (requires API key) |
+| `weather` | Get weather information with Open-Meteo (no API key needed) |
 | `django_model` | Read-only generic Django model queries for admin/debug workflows |
 | `django_auth` | Check user authentication, permissions, and groups |
 
@@ -1045,10 +1044,10 @@ uv build
 
 ```bash
 # Publish to TestPyPI first
-uv publish --publish-url https://test.pypi.org/legacy/ --token pypi-YOUR-TESTPYPI-TOKEN dist/djgent-0.3.0.tar.gz dist/djgent-0.3.0-py3-none-any.whl
+uv publish --publish-url https://test.pypi.org/legacy/ --token pypi-YOUR-TESTPYPI-TOKEN dist/djgent-0.3.1.tar.gz dist/djgent-0.3.1-py3-none-any.whl
 
 # Publish to PyPI after TestPyPI install verification
-uv publish --token pypi-YOUR-PYPI-TOKEN dist/djgent-0.3.0.tar.gz dist/djgent-0.3.0-py3-none-any.whl
+uv publish --token pypi-YOUR-PYPI-TOKEN dist/djgent-0.3.1.tar.gz dist/djgent-0.3.1-py3-none-any.whl
 ```
 
 ## License
@@ -1066,6 +1065,11 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 5. Open a Pull Request
 
 ## Changelog
+
+### 0.3.1 (2026-04-22)
+- Fixed configured chat input placeholders in the built-in chat UI
+- Cleaned up package formatting and release verification
+- Marked planned chain execution as coming soon
 
 ### 0.3.0 (2026-04-20)
 - Initial PyPI release of djgent

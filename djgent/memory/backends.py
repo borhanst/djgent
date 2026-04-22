@@ -1,6 +1,5 @@
 """Memory backend implementations for djgent."""
 
-from datetime import timedelta
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
@@ -30,12 +29,14 @@ class InMemoryMemory(BaseMemory):
 
     def add_message(self, role: str, content: str, **metadata: Any) -> None:
         """Add a message to memory."""
-        self._messages.append({
-            'role': role,
-            'content': content,
-            'created_at': timezone.now(),
-            'metadata': metadata,
-        })
+        self._messages.append(
+            {
+                "role": role,
+                "content": content,
+                "created_at": timezone.now(),
+                "metadata": metadata,
+            }
+        )
         self._updated_at = timezone.now()
 
     def get_messages(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
@@ -46,20 +47,20 @@ class InMemoryMemory(BaseMemory):
 
     def get_messages_as_langchain(self, limit: Optional[int] = None) -> List[Any]:
         """Get messages as LangChain message objects."""
-        from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+        from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
         messages = []
         source = self.get_messages(limit) if limit else self._messages
 
         for msg in source:
-            role = msg['role']
-            content = msg['content']
+            role = msg["role"]
+            content = msg["content"]
 
-            if role == 'human':
+            if role == "human":
                 messages.append(HumanMessage(content=content))
-            elif role == 'ai':
+            elif role == "ai":
                 messages.append(AIMessage(content=content))
-            elif role == 'system':
+            elif role == "system":
                 messages.append(SystemMessage(content=content))
 
         return messages
@@ -72,13 +73,13 @@ class InMemoryMemory(BaseMemory):
     def get_conversation_info(self) -> Dict[str, Any]:
         """Get conversation metadata."""
         return {
-            'id': 'memory',
-            'agent_name': self.agent_name,
-            'user': self.user.username if self.user else None,
-            'created_at': self._created_at,
-            'updated_at': self._updated_at,
-            'message_count': len(self._messages),
-            'backend': 'memory',
+            "id": "memory",
+            "agent_name": self.agent_name,
+            "user": self.user.username if self.user else None,
+            "created_at": self._created_at,
+            "updated_at": self._updated_at,
+            "message_count": len(self._messages),
+            "backend": "memory",
         }
 
     def get_state(self, thread_id: str) -> Optional[Dict[str, Any]]:
@@ -154,9 +155,7 @@ class DatabaseMemory(BaseMemory):
 
         input_tokens = int(metadata.pop("input_tokens", 0) or 0)
         output_tokens = int(metadata.pop("output_tokens", 0) or 0)
-        total_tokens = int(
-            metadata.pop("total_tokens", 0) or (input_tokens + output_tokens)
-        )
+        total_tokens = int(metadata.pop("total_tokens", 0) or (input_tokens + output_tokens))
         estimated_cost = Decimal(str(metadata.pop("estimated_cost", "0") or "0"))
 
         Message.objects.create(
@@ -226,19 +225,19 @@ class DatabaseMemory(BaseMemory):
             self.initialize()
 
         return {
-            'id': str(self._conversation.id),
-            'agent_name': self._conversation.agent_name,
-            'name': self._conversation.name,
-            'user': self._conversation.user.username if self._conversation.user else None,
-            'created_at': self._conversation.created_at,
-            'updated_at': self._conversation.updated_at,
-            'message_count': self._conversation.message_count,
-            'input_tokens': self._conversation.input_tokens,
-            'output_tokens': self._conversation.output_tokens,
-            'total_tokens': self._conversation.total_tokens,
-            'estimated_cost': str(self._conversation.estimated_cost),
-            'metadata': self._conversation.metadata,
-            'backend': 'database',
+            "id": str(self._conversation.id),
+            "agent_name": self._conversation.agent_name,
+            "name": self._conversation.name,
+            "user": self._conversation.user.username if self._conversation.user else None,
+            "created_at": self._conversation.created_at,
+            "updated_at": self._conversation.updated_at,
+            "message_count": self._conversation.message_count,
+            "input_tokens": self._conversation.input_tokens,
+            "output_tokens": self._conversation.output_tokens,
+            "total_tokens": self._conversation.total_tokens,
+            "estimated_cost": str(self._conversation.estimated_cost),
+            "metadata": self._conversation.metadata,
+            "backend": "database",
         }
 
     def delete(self) -> None:

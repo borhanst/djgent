@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-04-22
+
+### Fixed
+- Render configured chat input placeholders in the built-in chat UI.
+- Clean up package formatting and lint issues for release verification.
+
+
 ## [0.3.0] - 2026-04-20
 
 ### Added
@@ -32,9 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Audit logging, response caching, usage tracking, and admin integration
 - `ModelQueryTool` for safe model-backed database querying
 - Pydantic input validation and structured output support
-- Multi-agent helpers and simple chain execution
+- Multi-agent helpers
 - MCP tool loading support
 - Django system checks for configuration validation
 - Comprehensive documentation and examples
 
+### Coming Soon
+- Simple chain execution for sequential tool and agent workflows.
+
+[0.3.1]: https://pypi.org/project/djgent/0.3.1/
 [0.3.0]: https://pypi.org/project/djgent/0.3.0/

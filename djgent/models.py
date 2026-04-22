@@ -19,38 +19,30 @@ class Conversation(models.Model):
         primary_key=True,
         default=uuid.uuid4,
         editable=False,
-        help_text="Unique identifier for this conversation"
+        help_text="Unique identifier for this conversation",
     )
     name = models.CharField(
-        max_length=255,
-        blank=True,
-        default="",
-        help_text="Optional name for this conversation"
+        max_length=255, blank=True, default="", help_text="Optional name for this conversation"
     )
     agent_name = models.CharField(
-        max_length=255,
-        help_text="Name of the agent this conversation belongs to"
+        max_length=255, help_text="Name of the agent this conversation belongs to"
     )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
         on_delete=models.CASCADE,
-        related_name='djgent_conversations',
-        help_text="User associated with this conversation (optional)"
+        related_name="djgent_conversations",
+        help_text="User associated with this conversation (optional)",
     )
     created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="When this conversation was created"
+        auto_now_add=True, help_text="When this conversation was created"
     )
     updated_at = models.DateTimeField(
-        auto_now=True,
-        help_text="When this conversation was last updated"
+        auto_now=True, help_text="When this conversation was last updated"
     )
     metadata = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text="Additional metadata for this conversation"
+        default=dict, blank=True, help_text="Additional metadata for this conversation"
     )
     input_tokens = models.BigIntegerField(default=0)
     output_tokens = models.BigIntegerField(default=0)
@@ -62,10 +54,10 @@ class Conversation(models.Model):
     )
 
     class Meta:
-        db_table = 'djgent_conversation'
-        ordering = ['-updated_at']
-        verbose_name = 'Conversation'
-        verbose_name_plural = 'Conversations'
+        db_table = "djgent_conversation"
+        ordering = ["-updated_at"]
+        verbose_name = "Conversation"
+        verbose_name_plural = "Conversations"
 
     def __str__(self):
         name = self.name or f"Conversation {str(self.id)[:8]}"
@@ -86,18 +78,18 @@ class Conversation(models.Model):
     def to_dict(self):
         """Convert conversation to dictionary."""
         return {
-            'id': str(self.id),
-            'name': self.name,
-            'agent_name': self.agent_name,
-            'user_id': self.user_id,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat(),
-            'message_count': self.message_count,
-            'input_tokens': self.input_tokens,
-            'output_tokens': self.output_tokens,
-            'total_tokens': self.total_tokens,
-            'estimated_cost': str(self.estimated_cost),
-            'metadata': self.metadata,
+            "id": str(self.id),
+            "name": self.name,
+            "agent_name": self.agent_name,
+            "user_id": self.user_id,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "message_count": self.message_count,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "total_tokens": self.total_tokens,
+            "estimated_cost": str(self.estimated_cost),
+            "metadata": self.metadata,
         }
 
     def get_runtime_state(self, thread_id: str = "default"):
@@ -152,33 +144,24 @@ class Message(models.Model):
     """
 
     ROLE_CHOICES = [
-        ('human', 'Human'),
-        ('ai', 'AI'),
-        ('system', 'System'),
+        ("human", "Human"),
+        ("ai", "AI"),
+        ("system", "System"),
     ]
 
     conversation = models.ForeignKey(
         Conversation,
-        related_name='messages',
+        related_name="messages",
         on_delete=models.CASCADE,
-        help_text="The conversation this message belongs to"
+        help_text="The conversation this message belongs to",
     )
     role = models.CharField(
-        max_length=20,
-        choices=ROLE_CHOICES,
-        help_text="The role of the message sender"
+        max_length=20, choices=ROLE_CHOICES, help_text="The role of the message sender"
     )
-    content = models.TextField(
-        help_text="The message content"
-    )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="When this message was created"
-    )
+    content = models.TextField(help_text="The message content")
+    created_at = models.DateTimeField(auto_now_add=True, help_text="When this message was created")
     metadata = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text="Additional metadata for this message"
+        default=dict, blank=True, help_text="Additional metadata for this message"
     )
     input_tokens = models.BigIntegerField(default=0)
     output_tokens = models.BigIntegerField(default=0)
@@ -190,13 +173,13 @@ class Message(models.Model):
     )
 
     class Meta:
-        db_table = 'djgent_message'
-        ordering = ['created_at']
-        verbose_name = 'Message'
-        verbose_name_plural = 'Messages'
+        db_table = "djgent_message"
+        ordering = ["created_at"]
+        verbose_name = "Message"
+        verbose_name_plural = "Messages"
         indexes = [
-            models.Index(fields=['conversation', '-created_at']),
-            models.Index(fields=['role']),
+            models.Index(fields=["conversation", "-created_at"]),
+            models.Index(fields=["role"]),
         ]
 
     def __str__(self):
@@ -206,26 +189,26 @@ class Message(models.Model):
     def to_dict(self):
         """Convert message to dictionary."""
         return {
-            'id': self.id,
-            'conversation_id': str(self.conversation.id),
-            'role': self.role,
-            'content': self.content,
-            'created_at': self.created_at.isoformat(),
-            'input_tokens': self.input_tokens,
-            'output_tokens': self.output_tokens,
-            'total_tokens': self.total_tokens,
-            'estimated_cost': str(self.estimated_cost),
-            'metadata': self.metadata,
+            "id": self.id,
+            "conversation_id": str(self.conversation.id),
+            "role": self.role,
+            "content": self.content,
+            "created_at": self.created_at.isoformat(),
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "total_tokens": self.total_tokens,
+            "estimated_cost": str(self.estimated_cost),
+            "metadata": self.metadata,
         }
 
     def to_langchain_message(self):
         """Convert to LangChain message format."""
-        from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+        from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
         role_map = {
-            'human': HumanMessage,
-            'ai': AIMessage,
-            'system': SystemMessage,
+            "human": HumanMessage,
+            "ai": AIMessage,
+            "system": SystemMessage,
         }
 
         message_class = role_map.get(self.role, HumanMessage)
@@ -296,8 +279,6 @@ class KnowledgeDocument(models.Model):
         return f"{self.namespace}:{self.title}"
 
 
-
-
 class AuditLog(models.Model):
     """Model for storing audit logs in the database."""
 
@@ -316,19 +297,19 @@ class AuditLog(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
-        ordering = ['-timestamp']
+        ordering = ["-timestamp"]
         indexes = [
             models.Index(
-                fields=['agent_name', 'timestamp'],
-                name='djgent_audit_agent_ts_idx',
+                fields=["agent_name", "timestamp"],
+                name="djgent_audit_agent_ts_idx",
             ),
             models.Index(
-                fields=['user_id', 'timestamp'],
-                name='djgent_audit_user_ts_idx',
+                fields=["user_id", "timestamp"],
+                name="djgent_audit_user_ts_idx",
             ),
             models.Index(
-                fields=['conversation_id', 'timestamp'],
-                name='djgent_audit_conv_ts_idx',
+                fields=["conversation_id", "timestamp"],
+                name="djgent_audit_conv_ts_idx",
             ),
         ]
 

@@ -1,7 +1,7 @@
 """Management command to list conversations."""
 
-from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
+from django.core.management.base import BaseCommand
 
 User = get_user_model()
 
@@ -19,27 +19,12 @@ class Command(BaseCommand):
     help = "List conversations"
 
     def add_arguments(self, parser):
+        parser.add_argument("--user", type=str, help="Filter by username")
+        parser.add_argument("--agent", type=str, help="Filter by agent name")
         parser.add_argument(
-            "--user",
-            type=str,
-            help="Filter by username"
+            "--limit", type=int, default=20, help="Maximum number of conversations to show"
         )
-        parser.add_argument(
-            "--agent",
-            type=str,
-            help="Filter by agent name"
-        )
-        parser.add_argument(
-            "--limit",
-            type=int,
-            default=20,
-            help="Maximum number of conversations to show"
-        )
-        parser.add_argument(
-            "--verbose",
-            action="store_true",
-            help="Show detailed information"
-        )
+        parser.add_argument("--verbose", action="store_true", help="Show detailed information")
 
     def handle(self, *args, **options):
         from djgent.models import Conversation

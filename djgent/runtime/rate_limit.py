@@ -13,6 +13,7 @@ from djgent.runtime.middleware import AgentMiddleware, ExecutionContext
 @dataclass
 class RateLimitConfig:
     """Configuration for rate limiting."""
+
     requests_per_minute: int = 60
     requests_per_hour: int = 1000
     requests_per_day: int = 10000
@@ -23,6 +24,7 @@ class RateLimitConfig:
 @dataclass
 class RateLimitState:
     """Tracks rate limit state for a key."""
+
     request_times: list[float] = field(default_factory=list)
     hourly_times: list[float] = field(default_factory=list)
     daily_times: list[float] = field(default_factory=list)
@@ -184,6 +186,7 @@ class RateLimitMiddleware(AgentMiddleware):
 
         if not allowed:
             from djgent.exceptions import RateLimitError
+
             raise RateLimitError(
                 message=f"Rate limit exceeded: {reason}",
                 limit_type=reason,

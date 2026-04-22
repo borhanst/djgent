@@ -42,7 +42,6 @@ class ToolRegistry:
 
         def decorator(obj: Union[Tool, Type[Tool], Callable]) -> Union[Tool, Type[Tool], Callable]:
             tool_name = name or obj.__name__  # type: ignore
-            tool_desc = description or (obj.__doc__ or "").strip().split("\n")[0]  # type: ignore
 
             cls._tools[tool_name] = obj
             if source:
@@ -66,7 +65,9 @@ class ToolRegistry:
             RegistryError: If the tool is not found
         """
         if name not in cls._tools:
-            raise RegistryError(f"Tool '{name}' not found. Available tools: {list(cls._tools.keys())}")
+            raise RegistryError(
+                f"Tool '{name}' not found. Available tools: {list(cls._tools.keys())}"
+            )
         return cls._tools[name]
 
     @classmethod

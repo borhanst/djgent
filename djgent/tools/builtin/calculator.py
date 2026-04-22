@@ -2,7 +2,7 @@
 
 import ast
 import operator
-from typing import Any, Union
+from typing import Union
 
 from djgent.tools.base import Tool
 

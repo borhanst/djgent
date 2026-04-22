@@ -46,9 +46,7 @@ class BaseChatView(ABC):
     conversation_path_segment = "chat/"
     page_title = "Djgent Chat"
     chat_title = "Djgent Chat"
-    chat_subtitle = (
-        "A built-in chat surface for Djgent agents with persistent conversations."
-    )
+    chat_subtitle = "A built-in chat surface for Djgent agents with persistent conversations."
     welcome_message = (
         "Start with a question. Conversation history is stored with Djgent's "
         "database memory backend."
@@ -165,9 +163,7 @@ class BaseChatView(ABC):
     def get_provider_status(self) -> dict[str, Any]:
         djgent_settings = getattr(settings, "DJGENT", {}) or {}
         provider_string = djgent_settings.get("DEFAULT_LLM", "")
-        provider = (
-            provider_string.split(":", 1)[0].lower() if provider_string else ""
-        )
+        provider = provider_string.split(":", 1)[0].lower() if provider_string else ""
         api_keys = djgent_settings.get("API_KEYS", {}) or {}
 
         if provider == "ollama":
@@ -175,8 +171,7 @@ class BaseChatView(ABC):
                 "provider": provider_string,
                 "configured": True,
                 "message": (
-                    "Configured for Ollama. Make sure the Ollama server is "
-                    "running locally."
+                    "Configured for Ollama. Make sure the Ollama server is " "running locally."
                 ),
             }
 
@@ -211,9 +206,7 @@ class BaseChatView(ABC):
     def get_session_conversation_ids(self, request) -> list[str]:
         return list(request.session.get(self.get_session_key(), []))
 
-    def save_session_conversation_ids(
-        self, request, conversation_ids: list[str]
-    ) -> None:
+    def save_session_conversation_ids(self, request, conversation_ids: list[str]) -> None:
         request.session[self.get_session_key()] = conversation_ids
         request.session.modified = True
 
@@ -228,9 +221,9 @@ class BaseChatView(ABC):
 
     def get_conversation_queryset(self, request) -> models.QuerySet:
         user = self.get_active_user(request)
-        queryset = Conversation.objects.filter(
-            agent_name=self.get_agent_name()
-        ).order_by("-updated_at")
+        queryset = Conversation.objects.filter(agent_name=self.get_agent_name()).order_by(
+            "-updated_at"
+        )
 
         if user:
             return queryset.filter(user=user)
@@ -241,9 +234,7 @@ class BaseChatView(ABC):
         return queryset.filter(user__isnull=True, id__in=conversation_ids)
 
     def get_conversation_or_404(self, request, conversation_id: str) -> Conversation:
-        conversation = (
-            self.get_conversation_queryset(request).filter(id=conversation_id).first()
-        )
+        conversation = self.get_conversation_queryset(request).filter(id=conversation_id).first()
         if not conversation:
             raise Http404("Conversation not found.")
         return conversation
@@ -262,9 +253,7 @@ class BaseChatView(ABC):
             ),
         }
 
-    def serialize_messages(
-        self, conversation: Optional[Conversation]
-    ) -> list[dict[str, Any]]:
+    def serialize_messages(self, conversation: Optional[Conversation]) -> list[dict[str, Any]]:
         if not conversation:
             return []
 
@@ -279,17 +268,14 @@ class BaseChatView(ABC):
         ]
 
     @abstractmethod
-    def build_agent(
-        self, request, conversation_id: Optional[str] = None
-    ) -> Agent:
+    def build_agent(self, request, conversation_id: Optional[str] = None) -> Agent:
         """Return an Agent instance for handling chat messages."""
 
     def maybe_name_conversation(self, conversation: Conversation, prompt: str) -> None:
         if conversation.name:
             return
         conversation.name = (
-            prompt.strip()[: self.default_conversation_name_length]
-            or "Untitled chat"
+            prompt.strip()[: self.default_conversation_name_length] or "Untitled chat"
         )
         conversation.save(update_fields=["name", "updated_at"])
 
@@ -302,9 +288,7 @@ class BaseChatView(ABC):
     ) -> dict[str, Any]:
         selected_conversation = None
         if conversation_id:
-            selected_conversation = self.get_conversation_or_404(
-                request, conversation_id
-            )
+            selected_conversation = self.get_conversation_or_404(request, conversation_id)
 
         conversations = [
             self.serialize_conversation(item)
@@ -320,19 +304,17 @@ class BaseChatView(ABC):
             "input_placeholder": self.get_input_placeholder(),
             "tool_names": ", ".join(tools) or "none",
             "conversations": conversations,
-            "selected_conversation": self.serialize_conversation(
-                selected_conversation
-            )
-            if selected_conversation
-            else None,
+            "selected_conversation": (
+                self.serialize_conversation(selected_conversation)
+                if selected_conversation
+                else None
+            ),
             "initial_messages": self.serialize_messages(selected_conversation),
             "provider_status": self.get_provider_status(),
             "chat_api_url": self.get_message_url(request),
             "new_chat_url": self.get_new_conversation_url(request),
             "chat_base_url": self.get_home_url(request),
-            "conversation_path_prefix": self.get_conversation_path_prefix(
-                request, embed=embed
-            ),
+            "conversation_path_prefix": self.get_conversation_path_prefix(request, embed=embed),
             "history_updates_enabled": not embed,
             "is_embed": embed,
         }
@@ -362,9 +344,7 @@ class BaseChatView(ABC):
             conversation_ids.clear()
             self.save_session_conversation_ids(request, conversation_ids)
 
-        return JsonResponse(
-            {"ok": True, "redirect_url": self.get_home_url(request)}
-        )
+        return JsonResponse({"ok": True, "redirect_url": self.get_home_url(request)})
 
     def post_message(self, request) -> JsonResponse:
         provider_status = self.get_provider_status()
@@ -444,24 +424,14 @@ class ConfiguredChatView(BaseChatView):
             "subtitle": chat_settings.get("SUBTITLE", self.chat_subtitle),
             "system_prompt": chat_settings.get("SYSTEM_PROMPT", BaseChatView.system_prompt),
             "tools": list(chat_settings.get("TOOLS", self.tools)),
-            "auto_load_tools": chat_settings.get(
-                "AUTO_LOAD_TOOLS", self.auto_load_tools
-            ),
-            "welcome_message": chat_settings.get(
-                "WELCOME_MESSAGE", self.welcome_message
-            ),
-            "input_placeholder": chat_settings.get(
-                "INPUT_PLACEHOLDER", self.input_placeholder
-            ),
+            "auto_load_tools": chat_settings.get("AUTO_LOAD_TOOLS", self.auto_load_tools),
+            "welcome_message": chat_settings.get("WELCOME_MESSAGE", self.welcome_message),
+            "input_placeholder": chat_settings.get("INPUT_PLACEHOLDER", self.input_placeholder),
             "bubble_enabled": chat_settings.get("BUBBLE_ENABLED", False),
             "bubble_title": chat_settings.get("BUBBLE_TITLE", "Ask Djgent"),
             "bubble_label": chat_settings.get("BUBBLE_LABEL", "Open Djgent chat"),
-            "bubble_position": chat_settings.get(
-                "BUBBLE_POSITION", "bottom-right"
-            ),
-            "bubble_panel_width": chat_settings.get(
-                "BUBBLE_PANEL_WIDTH", "420px"
-            ),
+            "bubble_position": chat_settings.get("BUBBLE_POSITION", "bottom-right"),
+            "bubble_panel_width": chat_settings.get("BUBBLE_PANEL_WIDTH", "420px"),
             "bubble_panel_mobile_height": chat_settings.get(
                 "BUBBLE_PANEL_MOBILE_HEIGHT",
                 "78vh",
@@ -495,9 +465,7 @@ class ConfiguredChatView(BaseChatView):
     def get_system_prompt(self) -> str:
         return self.get_settings()["system_prompt"]
 
-    def build_agent(
-        self, request, conversation_id: Optional[str] = None
-    ) -> Agent:
+    def build_agent(self, request, conversation_id: Optional[str] = None) -> Agent:
         return Agent.create(
             name=self.get_agent_name(),
             tools=self.get_tool_names(),

@@ -25,7 +25,7 @@
         <div class="composer-inner">
             <label class="sr-only" for="message-input">Message</label>
             <div class="composer-box">
-                <textarea id="message-input" name="message" rows="1" placeholder="{% if is_embed %}Message Djgent...{% else %}Message Assistant...{% endif %}" required></textarea>
+                <textarea id="message-input" name="message" rows="1" placeholder="{{ input_placeholder }}" required></textarea>
                 <button type="submit" class="send-btn" aria-label="Send message">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />

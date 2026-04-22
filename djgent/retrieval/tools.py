@@ -13,9 +13,7 @@ class RetrievalTool(Tool):
     """Query a retriever-backed knowledge base."""
 
     name = "knowledge_retrieval"
-    description = (
-        "Search Djgent knowledge documents and return relevant context."
-    )
+    description = "Search Djgent knowledge documents and return relevant context."
     risk_level = "low"
 
     def __init__(
@@ -26,14 +24,10 @@ class RetrievalTool(Tool):
     ):
         super().__init__(**kwargs)
         self.namespace = namespace
-        self.retriever = retriever or DjangoKnowledgeRetriever(
-            namespace=namespace
-        )
+        self.retriever = retriever or DjangoKnowledgeRetriever(namespace=namespace)
 
     def _run(self, query: str, limit: int = 5, **kwargs: Any) -> str:
-        documents = self.retriever.get_relevant_documents(
-            query, limit=limit, **kwargs
-        )
+        documents = self.retriever.get_relevant_documents(query, limit=limit, **kwargs)
         return json.dumps(
             {
                 "query": query,

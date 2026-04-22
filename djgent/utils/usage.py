@@ -102,9 +102,7 @@ def extract_usage_details(
             usage_metadata.get("completion_tokens"),
         )
     )
-    total_tokens = _coerce_int(
-        usage_metadata.get("total_tokens", input_tokens + output_tokens)
-    )
+    total_tokens = _coerce_int(usage_metadata.get("total_tokens", input_tokens + output_tokens))
     model_name = (
         response_metadata.get("model_name")
         or response_metadata.get("model")

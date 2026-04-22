@@ -149,9 +149,7 @@ class Agent:
         except Exception:
             return False
 
-        return bool(config.get("ENABLED", True)) and bool(
-            config.get("AUTO_MIDDLEWARE", True)
-        )
+        return bool(config.get("ENABLED", True)) and bool(config.get("AUTO_MIDDLEWARE", True))
 
     def _build_langchain_runtime(
         self,
@@ -184,9 +182,7 @@ class Agent:
         self._memory_backend.initialize()
 
         if conversation_id or (backend == "memory"):
-            self._message_history = (
-                self._memory_backend.get_messages_as_langchain()
-            )
+            self._message_history = self._memory_backend.get_messages_as_langchain()
 
     def _ensure_memory_backend(self) -> bool:
         """Lazily create and initialize the configured memory backend."""
@@ -196,16 +192,12 @@ class Agent:
         if self._memory_backend is None:
             self._init_memory_backend(**self._memory_init_kwargs)
 
-        if self._memory_backend and not getattr(
-            self._memory_backend, "_initialized", False
-        ):
+        if self._memory_backend and not getattr(self._memory_backend, "_initialized", False):
             self._memory_backend.initialize()
 
         return self._memory_backend is not None
 
-    def _process_tools(
-        self, tools: List[Union[str, Tool, Callable, Any]]
-    ) -> List[Any]:
+    def _process_tools(self, tools: List[Union[str, Tool, Callable, Any]]) -> List[Any]:
         """Normalize tool definitions into instances or compatible tool objects."""
         processed: List[Any] = []
         for tool in tools:
@@ -256,9 +248,7 @@ class Agent:
             state=durable_state.to_dict(),
         )
         if self._memory_backend and self._memory_backend.conversation_id:
-            execution.metadata["conversation_id"] = str(
-                self._memory_backend.conversation_id
-            )
+            execution.metadata["conversation_id"] = str(self._memory_backend.conversation_id)
         user = getattr(self._memory_backend, "user", None)
         if user is not None and getattr(user, "is_authenticated", False):
             execution.metadata["user_id"] = getattr(user, "id", None)
@@ -278,9 +268,7 @@ class Agent:
                     data[config["name"]] = config
         return data
 
-    def _build_messages(
-        self, input: str, execution: ExecutionContext
-    ) -> List[BaseMessage]:
+    def _build_messages(self, input: str, execution: ExecutionContext) -> List[BaseMessage]:
         """Assemble the message list for the LLM."""
         messages: List[BaseMessage] = []
 
@@ -297,9 +285,7 @@ class Agent:
         messages.append(HumanMessage(content=input))
         return messages
 
-    def _prepare_langchain_tools(
-        self, execution: ExecutionContext
-    ) -> List[Any]:
+    def _prepare_langchain_tools(self, execution: ExecutionContext) -> List[Any]:
         """Convert Djgent tools into LangChain-compatible wrappers."""
         lc_tools = []
 
@@ -312,9 +298,7 @@ class Agent:
             apply_before_tool(self._middleware, execution, tool_name, arguments)
 
         def after_tool(tool_name: str, result: Any) -> Any:
-            result = apply_after_tool(
-                self._middleware, execution, tool_name, result
-            )
+            result = apply_after_tool(self._middleware, execution, tool_name, result)
             execution.emit(
                 "tool.end",
                 tool=tool_name,
@@ -343,10 +327,7 @@ class Agent:
                 for item in fields(value)
             }
         if isinstance(value, dict):
-            return {
-                str(key): self._safe_event_value(item)
-                for key, item in value.items()
-            }
+            return {str(key): self._safe_event_value(item) for key, item in value.items()}
         if isinstance(value, (list, tuple)):
             return [self._safe_event_value(item) for item in value]
         if isinstance(value, (str, int, float, bool)) or value is None:
@@ -365,9 +346,7 @@ class Agent:
     ) -> Any:
         """Invoke the underlying model or tool-aware agent."""
         if not self.llm:
-            raise ValueError(
-                "LLM not configured. Provide an LLM when creating the agent."
-            )
+            raise ValueError("LLM not configured. Provide an LLM when creating the agent.")
 
         lc_tools = self._prepare_langchain_tools(execution)
         model_kwargs = dict(kwargs)
@@ -384,13 +363,9 @@ class Agent:
                 schema=schema_name(self.response_schema),
             )
             try:
-                structured_llm = self.llm.with_structured_output(
-                    self.response_schema
-                )
+                structured_llm = self.llm.with_structured_output(self.response_schema)
             except NotImplementedError:
-                execution.emit(
-                    "model.structured_fallback", reason="native_not_supported"
-                )
+                execution.emit("model.structured_fallback", reason="native_not_supported")
             else:
                 return structured_llm.invoke(messages, **model_kwargs)
 
@@ -432,9 +407,7 @@ class Agent:
 
         return self.llm.invoke(messages, **model_kwargs)
 
-    def _normalize_agent_output(
-        self, result: Any
-    ) -> tuple[str, Optional[Any], List[Any]]:
+    def _normalize_agent_output(self, result: Any) -> tuple[str, Optional[Any], List[Any]]:
         """Normalize model results into text, structured payload, and messages."""
         structured_response = None
         output_messages: List[Any] = []
@@ -497,9 +470,7 @@ class Agent:
         except Exception:
             return None
 
-    def _coerce_structured_output(
-        self, output: str, schema: Optional[Type[Any]]
-    ) -> Optional[Any]:
+    def _coerce_structured_output(self, output: str, schema: Optional[Type[Any]]) -> Optional[Any]:
         """Validate a text output against the requested schema when possible."""
         schema = schema or self.response_schema
         if not schema:
@@ -547,17 +518,11 @@ class Agent:
                         "input_tokens": usage_details.get("input_tokens", 0),
                         "output_tokens": usage_details.get("output_tokens", 0),
                         "total_tokens": usage_details.get("total_tokens", 0),
-                        "estimated_cost": str(
-                            usage_details.get("estimated_cost", "0")
-                        ),
+                        "estimated_cost": str(usage_details.get("estimated_cost", "0")),
                         "model_name": usage_details.get("model_name"),
                         "llm_identifier": usage_details.get("llm_identifier"),
-                        "usage_metadata": usage_details.get(
-                            "usage_metadata", {}
-                        ),
-                        "response_metadata": usage_details.get(
-                            "response_metadata", {}
-                        ),
+                        "usage_metadata": usage_details.get("usage_metadata", {}),
+                        "response_metadata": usage_details.get("response_metadata", {}),
                     }
                 )
             self._memory_backend.add_message("ai", str(output), **ai_metadata)
@@ -575,12 +540,8 @@ class Agent:
 
         if approval_error:
             execution.state["status"] = "waiting_for_approval"
-            execution.state["paused_tool_name"] = (
-                approval_error.request.tool_name
-            )
-            execution.state["paused_tool_arguments"] = (
-                approval_error.request.arguments
-            )
+            execution.state["paused_tool_name"] = approval_error.request.tool_name
+            execution.state["paused_tool_arguments"] = approval_error.request.arguments
             execution.state["last_output"] = approval_error.request.reason
         else:
             history.append({"role": "ai", "content": output})
@@ -629,15 +590,9 @@ class Agent:
 
     def _audit_middleware_items(self) -> List[AuditMiddleware]:
         """Return configured audit middleware instances."""
-        return [
-            item
-            for item in self._middleware
-            if isinstance(item, AuditMiddleware)
-        ]
+        return [item for item in self._middleware if isinstance(item, AuditMiddleware)]
 
-    def _log_audit_failed_run(
-        self, execution: ExecutionContext, error: Exception
-    ) -> None:
+    def _log_audit_failed_run(self, execution: ExecutionContext, error: Exception) -> None:
         """Ask audit middleware to record a failed run."""
         for item in self._audit_middleware_items():
             item.log_failed_run(execution, error)
@@ -655,9 +610,7 @@ class Agent:
                 reason=error.request.reason,
             )
 
-    def _log_audit_rate_limit(
-        self, execution: ExecutionContext, error: Exception
-    ) -> None:
+    def _log_audit_rate_limit(self, execution: ExecutionContext, error: Exception) -> None:
         """Ask audit middleware to record a rate-limit failure."""
         for item in self._audit_middleware_items():
             item.log_rate_limit(execution, error)
@@ -672,9 +625,7 @@ class Agent:
     ) -> AgentResult:
         """Run the agent and return a normalized rich result."""
         self._initialize_memory_for_run()
-        execution = self._build_execution_context(
-            input, context=context, thread_id=thread_id
-        )
+        execution = self._build_execution_context(input, context=context, thread_id=thread_id)
         active_schema = response_schema or self.response_schema
         original_schema = self.response_schema
         if active_schema is not self.response_schema:
@@ -684,22 +635,17 @@ class Agent:
         try:
             apply_before_run(self._middleware, execution)
             messages = self._build_messages(input, execution)
-            execution.emit(
-                "run.start", input=input, thread_id=execution.thread_id
-            )
+            execution.emit("run.start", input=input, thread_id=execution.thread_id)
             raw_result = self._invoke_model(messages, execution, **kwargs)
-            output, structured_response, output_messages = (
-                self._normalize_agent_output(raw_result)
-            )
+            output, structured_response, output_messages = self._normalize_agent_output(raw_result)
             usage_details = extract_usage_details(
                 raw_result,
                 output_messages,
                 llm_identifier=self.llm_identifier,
             )
             output = apply_after_run(self._middleware, execution, output)
-            structured_response = (
-                structured_response
-                or self._coerce_structured_output(output, active_schema)
+            structured_response = structured_response or self._coerce_structured_output(
+                output, active_schema
             )
             self._update_history(
                 input,
@@ -710,9 +656,7 @@ class Agent:
             self._persist_execution_state(execution, output=output)
             execution.emit("run.end", output=output)
         except ApprovalRequiredError as exc:
-            self._persist_execution_state(
-                execution, output=exc.request.reason, approval_error=exc
-            )
+            self._persist_execution_state(execution, output=exc.request.reason, approval_error=exc)
             self._persist_failed_run(
                 input,
                 exc.request.reason or str(exc),
@@ -748,9 +692,7 @@ class Agent:
             )
             if isinstance(exc, RateLimitError):
                 raise
-            raise AgentError(
-                f"Error executing agent '{self.name}': {str(exc)}"
-            ) from exc
+            raise AgentError(f"Error executing agent '{self.name}': {str(exc)}") from exc
         finally:
             self.response_schema = original_schema
 
@@ -789,9 +731,7 @@ class Agent:
         **kwargs: Any,
     ) -> Any:
         """Async wrapper around run()."""
-        return await asyncio.to_thread(
-            self.run, input, context=context, **kwargs
-        )
+        return await asyncio.to_thread(self.run, input, context=context, **kwargs)
 
     def invoke(
         self,
@@ -810,23 +750,17 @@ class Agent:
             message_content = inputs.get("input")
 
         if not isinstance(message_content, str) or not message_content:
-            raise AgentError(
-                "invoke() requires a non-empty 'input' or final message content."
-            )
+            raise AgentError("invoke() requires a non-empty 'input' or final message content.")
 
         result = self._execute(message_content, context=context, **kwargs)
-        output_messages = (
-            list(raw_messages) if raw_messages else list(result.messages)
-        )
+        output_messages = list(raw_messages) if raw_messages else list(result.messages)
         if raw_messages:
             output_messages.append(AIMessage(content=str(result.output)))
 
         payload = {
             "messages": output_messages,
             "output": result.output,
-            "thread_id": result.state.get(
-                "thread_id", self._resolve_thread_id()
-            ),
+            "thread_id": result.state.get("thread_id", self._resolve_thread_id()),
             "state": result.state,
         }
         if result.structured_response is not None:
@@ -840,9 +774,7 @@ class Agent:
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """Async wrapper around invoke()."""
-        return await asyncio.to_thread(
-            self.invoke, inputs, context=context, **kwargs
-        )
+        return await asyncio.to_thread(self.invoke, inputs, context=context, **kwargs)
 
     def stream(
         self,
@@ -863,9 +795,7 @@ class Agent:
         **kwargs: Any,
     ):
         """Async generator yielding execution events."""
-        result = await asyncio.to_thread(
-            self._execute, input, context, **kwargs
-        )
+        result = await asyncio.to_thread(self._execute, input, context, **kwargs)
         for event in result.events:
             yield event
         yield result.output
@@ -876,11 +806,7 @@ class Agent:
         """Mark a pending tool as approved for the next execution attempt."""
         active_thread_id = thread_id or self._resolve_thread_id()
         state = self._state_store.load(active_thread_id)
-        if (
-            tool_name
-            and state.paused_tool_name
-            and state.paused_tool_name != tool_name
-        ):
+        if tool_name and state.paused_tool_name and state.paused_tool_name != tool_name:
             raise AgentError(
                 f"Thread '{active_thread_id}' is waiting on "
                 f"'{state.paused_tool_name}', not '{tool_name}'."
@@ -892,9 +818,7 @@ class Agent:
         state.status = "approved"
         self._state_store.save(state)
 
-    def get_thread_state(
-        self, thread_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def get_thread_state(self, thread_id: Optional[str] = None) -> Dict[str, Any]:
         """Return durable state for a thread."""
         active_thread_id = thread_id or self._resolve_thread_id()
         return self._state_store.load(active_thread_id).to_dict()
@@ -909,15 +833,9 @@ class Agent:
     ) -> Any:
         """Persist a long-term memory fact."""
         conversation = (
-            getattr(self._memory_backend, "conversation", None)
-            if self._memory_backend
-            else None
+            getattr(self._memory_backend, "conversation", None) if self._memory_backend else None
         )
-        user = (
-            getattr(self._memory_backend, "user", None)
-            if self._memory_backend
-            else None
-        )
+        user = getattr(self._memory_backend, "user", None) if self._memory_backend else None
         return memory_store.put(
             key,
             value,
@@ -936,33 +854,19 @@ class Agent:
     ) -> Optional[str]:
         """Fetch a long-term memory fact."""
         conversation = (
-            getattr(self._memory_backend, "conversation", None)
-            if self._memory_backend
-            else None
+            getattr(self._memory_backend, "conversation", None) if self._memory_backend else None
         )
-        user = (
-            getattr(self._memory_backend, "user", None)
-            if self._memory_backend
-            else None
-        )
-        return memory_store.get(
-            key, scope=scope, user=user, conversation=conversation
-        )
+        user = getattr(self._memory_backend, "user", None) if self._memory_backend else None
+        return memory_store.get(key, scope=scope, user=user, conversation=conversation)
 
     def list_memories(
         self, *, scope: Optional[str] = None, limit: int = 50
     ) -> List[Dict[str, Any]]:
         """List long-term memory facts for the current agent/user."""
         conversation = (
-            getattr(self._memory_backend, "conversation", None)
-            if self._memory_backend
-            else None
+            getattr(self._memory_backend, "conversation", None) if self._memory_backend else None
         )
-        user = (
-            getattr(self._memory_backend, "user", None)
-            if self._memory_backend
-            else None
-        )
+        user = getattr(self._memory_backend, "user", None) if self._memory_backend else None
         return memory_store.list(
             scope=scope,
             user=user,
@@ -1067,9 +971,7 @@ class Agent:
 
         # Get LLM from settings or provider override
         djgent_settings = getattr(settings, "DJGENT", {})
-        llm_string = llm_provider or djgent_settings.get(
-            "DEFAULT_LLM", "google:gemini-2.5-flash"
-        )
+        llm_string = llm_provider or djgent_settings.get("DEFAULT_LLM", "google:gemini-2.5-flash")
         llm_instance = get_llm(llm_string)
 
         processed_tools = list(tools) if tools else []
@@ -1217,9 +1119,7 @@ class Agent:
                 agent_config = agent_item
                 agent_name = agent_config.get("name")
                 if not agent_name:
-                    raise AgentError(
-                        "Each agent configuration must include a 'name' field"
-                    )
+                    raise AgentError("Each agent configuration must include a 'name' field")
 
                 role = agent_config.get("role", f"Specialist: {agent_name}")
                 agent_memory = agent_config.get("memory", memory)
@@ -1235,9 +1135,7 @@ class Agent:
                 }
 
                 # Create the agent
-                subagent = cls.create(
-                    **{k: v for k, v in agent_kwargs.items() if v is not None}
-                )
+                subagent = cls.create(**{k: v for k, v in agent_kwargs.items() if v is not None})
                 subagents.append((subagent, role))
             else:
                 raise AgentError(

@@ -101,9 +101,7 @@ class AuditMiddleware(AgentMiddleware):
             user_id=self._user_id(execution),
             thread_id=execution.thread_id,
             conversation_id=self._conversation_id(execution),
-            duration_ms=self._duration_ms(
-                execution.metadata.get("audit_run_start")
-            ),
+            duration_ms=self._duration_ms(execution.metadata.get("audit_run_start")),
         )
         return output
 
@@ -132,9 +130,7 @@ class AuditMiddleware(AgentMiddleware):
         starts = execution.metadata.get("audit_tool_starts", {})
         arguments = {}
         if self.log_tool_arguments:
-            arguments = execution.metadata.get("audit_tool_arguments", {}).get(
-                tool_name, {}
-            )
+            arguments = execution.metadata.get("audit_tool_arguments", {}).get(tool_name, {})
 
         get_audit_logger().log_tool_execution(
             tool_name=tool_name,
@@ -160,9 +156,7 @@ class AuditMiddleware(AgentMiddleware):
             user_id=self._user_id(execution),
             thread_id=execution.thread_id,
             conversation_id=self._conversation_id(execution),
-            duration_ms=self._duration_ms(
-                execution.metadata.get("audit_run_start")
-            ),
+            duration_ms=self._duration_ms(execution.metadata.get("audit_run_start")),
             error=str(error),
         )
 
@@ -265,9 +259,7 @@ class ToolApprovalMiddleware(AgentMiddleware):
         if not config:
             return
 
-        reason = (
-            config.get("reason") or f"Tool '{tool_name}' requires approval."
-        )
+        reason = config.get("reason") or f"Tool '{tool_name}' requires approval."
         raise ApprovalRequiredError(
             tool_name=tool_name,
             arguments=arguments,
@@ -283,16 +275,12 @@ class OutputGuardrailMiddleware(AgentMiddleware):
         cleaned = (output or "").strip()
         if cleaned:
             return cleaned
-        fallback = execution.context.get(
-            "empty_output_fallback", "I processed your request."
-        )
+        fallback = execution.context.get("empty_output_fallback", "I processed your request.")
         execution.emit("guardrail.empty_output", fallback=fallback)
         return fallback
 
 
-def apply_before_run(
-    middleware: Iterable[AgentMiddleware], execution: ExecutionContext
-) -> None:
+def apply_before_run(middleware: Iterable[AgentMiddleware], execution: ExecutionContext) -> None:
     """Run before_run hooks."""
     for item in middleware:
         item.before_run(execution)

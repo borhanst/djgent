@@ -40,9 +40,7 @@ class DjangoKnowledgeRetriever(BaseRetriever):
         for term in terms:
             q_filter |= Q(title__icontains=term) | Q(content__icontains=term)
 
-        queryset = KnowledgeDocument.objects.filter(q_filter, namespace=self.namespace)[
-            :200
-        ]
+        queryset = KnowledgeDocument.objects.filter(q_filter, namespace=self.namespace)[:200]
 
         results = []
         terms_lower = [t.lower() for t in terms]

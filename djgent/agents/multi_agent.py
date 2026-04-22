@@ -97,7 +97,8 @@ Think step-by-step:
 - Then, invoke them with a clear, specific query
 - Finally, synthesize their response for the user
 
-If you're unsure which specialist to use, or if the request requires multiple specialists, invoke them one at a time and combine their responses.
+If you're unsure which specialist to use, or if the request requires multiple
+specialists, invoke them one at a time and combine their responses.
 
 Important:
 - Always invoke specialists using their exact tool names (e.g., "tech_agent_subagent")
@@ -199,9 +200,7 @@ Important:
             self.subagent_roles[agent_name] = role
         elif agent.system_prompt:
             # Use first line of system_prompt as role
-            self.subagent_roles[agent_name] = agent.system_prompt.strip().split(
-                "\n"
-            )[0]
+            self.subagent_roles[agent_name] = agent.system_prompt.strip().split("\n")[0]
         else:
             self.subagent_roles[agent_name] = f"Specialist agent: {agent_name}"
 
@@ -211,7 +210,8 @@ Important:
 
         if self.verbose:
             print(
-                f"[MultiAgent:{self.name}] Added subagent: {agent_name} - {self.subagent_roles[agent_name]}"
+                f"[MultiAgent:{self.name}] Added subagent: "
+                f"{agent_name} - {self.subagent_roles[agent_name]}"
             )
 
     def remove_subagent(self, agent_name: str) -> bool:
@@ -230,9 +230,7 @@ Important:
             del self.subagent_tools[agent_name]
 
             if self.verbose:
-                print(
-                    f"[MultiAgent:{self.name}] Removed subagent: {agent_name}"
-                )
+                print(f"[MultiAgent:{self.name}] Removed subagent: {agent_name}")
             return True
         return False
 
@@ -259,10 +257,7 @@ Important:
             for subagent in team.list_subagents():
                 print(f"{subagent['name']}: {subagent['role']}")
         """
-        return [
-            {"name": name, "role": role}
-            for name, role in self.subagent_roles.items()
-        ]
+        return [{"name": name, "role": role} for name, role in self.subagent_roles.items()]
 
     def _build_main_agent(self, config: Dict[str, Any]) -> None:
         """
@@ -277,9 +272,7 @@ Important:
         # Create system prompt
         system_prompt = config.get(
             "system_prompt",
-            self.DEFAULT_MAIN_AGENT_PROMPT.format(
-                subagent_descriptions=subagent_descriptions
-            ),
+            self.DEFAULT_MAIN_AGENT_PROMPT.format(subagent_descriptions=subagent_descriptions),
         )
 
         # Collect all subagent tools
@@ -338,14 +331,10 @@ Important:
             print(response)
         """
         if not self.main_agent:
-            raise AgentError(
-                f"MultiAgent '{self.name}' has no main agent configured"
-            )
+            raise AgentError(f"MultiAgent '{self.name}' has no main agent configured")
 
         if self.verbose:
-            print(
-                f"[MultiAgent:{self.name}] Processing request: {input[:100]}..."
-            )
+            print(f"[MultiAgent:{self.name}] Processing request: {input[:100]}...")
 
         try:
             result = self.main_agent.run(input, **kwargs)
@@ -355,9 +344,7 @@ Important:
 
             return result
         except Exception as e:
-            raise AgentError(
-                f"Error in MultiAgent '{self.name}': {str(e)}"
-            ) from e
+            raise AgentError(f"Error in MultiAgent '{self.name}': {str(e)}") from e
 
     def run_parallel(
         self,
@@ -385,9 +372,7 @@ Important:
         # Determine which subagents to invoke
         if subagent_names:
             agents_to_invoke = [
-                (name, self.subagents[name])
-                for name in subagent_names
-                if name in self.subagents
+                (name, self.subagents[name]) for name in subagent_names if name in self.subagents
             ]
         else:
             agents_to_invoke = list(self.subagents.items())
@@ -397,13 +382,10 @@ Important:
 
         # Invoke subagents in parallel
         results = {}
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=len(agents_to_invoke)
-        ) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(agents_to_invoke)) as executor:
             # Submit all tasks
             future_to_name = {
-                executor.submit(agent.run, input): name
-                for name, agent in agents_to_invoke
+                executor.submit(agent.run, input): name for name, agent in agents_to_invoke
             }
 
             # Collect results

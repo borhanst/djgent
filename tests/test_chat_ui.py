@@ -33,6 +33,16 @@ class TestBuiltInChatUi:
         assert b"Test Chat" in response.content
         assert b"New conversation" in response.content
 
+    def test_configured_input_placeholder_renders(self, settings) -> None:
+        self._configure(settings)
+        settings.DJGENT["CHAT_UI"]["INPUT_PLACEHOLDER"] = "Ask the release assistant"
+        client = Client()
+
+        response = client.get("/")
+
+        assert response.status_code == 200
+        assert b'placeholder="Ask the release assistant"' in response.content
+
     def test_post_message_creates_conversation(self, settings) -> None:
         self._configure(settings)
         client = Client()
@@ -42,9 +52,7 @@ class TestBuiltInChatUi:
         )
 
         with patch("djgent.chat.views.ConfiguredChatView.build_agent") as build_agent:
-            build_agent.return_value.get_conversation_id.return_value = str(
-                conversation.id
-            )
+            build_agent.return_value.get_conversation_id.return_value = str(conversation.id)
 
             with patch("djgent.chat.views.run_agent_with_request") as runner:
                 runner.return_value = {"output": "Hello from Djgent"}
@@ -66,9 +74,7 @@ class TestBuiltInChatUi:
         )
         assert conversation.name == "Hello"
 
-    def test_anonymous_user_can_only_access_session_conversation(
-        self, settings
-    ) -> None:
+    def test_anonymous_user_can_only_access_session_conversation(self, settings) -> None:
         self._configure(settings)
         client = Client()
         own_conversation = Conversation.objects.create(
@@ -127,9 +133,7 @@ class TestBuiltInChatUi:
         assert own_response.status_code == 200
         assert other_response.status_code == 404
 
-    def test_configured_chat_auto_loads_registered_tools_by_default(
-        self, settings
-    ) -> None:
+    def test_configured_chat_auto_loads_registered_tools_by_default(self, settings) -> None:
         self._configure(settings)
         request = Client().get("/").wsgi_request
 
@@ -181,12 +185,8 @@ class TestCustomChatView:
             name="",
         )
 
-        with patch(
-            "tests.custom_chat_views.TestCustomChatView.build_agent"
-        ) as build_agent:
-            build_agent.return_value.get_conversation_id.return_value = str(
-                conversation.id
-            )
+        with patch("tests.custom_chat_views.TestCustomChatView.build_agent") as build_agent:
+            build_agent.return_value.get_conversation_id.return_value = str(conversation.id)
 
             with patch("djgent.chat.views.run_agent_with_request") as runner:
                 runner.return_value = {"output": "Hello from custom chat"}

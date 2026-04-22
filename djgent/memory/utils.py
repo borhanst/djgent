@@ -1,8 +1,9 @@
 """Utility functions for djgent memory management."""
 
-from typing import Any, Dict, List, Optional
-from django.utils import timezone
 from datetime import timedelta
+from typing import Any, Dict, List, Optional
+
+from django.utils import timezone
 
 
 def create_conversation(
@@ -119,7 +120,7 @@ def get_all_conversations(
         queryset = queryset.filter(agent_name=agent_name)
 
     if limit:
-        queryset = queryset[offset:offset + limit]
+        queryset = queryset[offset : offset + limit]
 
     return list(queryset)
 
@@ -187,10 +188,10 @@ def clear_old_conversations(
         queryset.delete()
 
     return {
-        'deleted': count if not dry_run else 0,
-        'would_delete': count,
-        'dry_run': dry_run,
-        'cutoff_date': cutoff_date.isoformat(),
+        "deleted": count if not dry_run else 0,
+        "would_delete": count,
+        "dry_run": dry_run,
+        "cutoff_date": cutoff_date.isoformat(),
     }
 
 
@@ -209,6 +210,7 @@ def export_conversation(conversation_id: str, format: str = "json") -> Any:
         data = export_conversation(conv_id, format="json")
     """
     import json
+
     from djgent.models import Conversation
 
     try:
@@ -219,18 +221,20 @@ def export_conversation(conversation_id: str, format: str = "json") -> Any:
     # Get messages
     messages = []
     for msg in conversation.messages.all():
-        messages.append({
-            'id': msg.id,
-            'role': msg.role,
-            'content': msg.content,
-            'created_at': msg.created_at.isoformat(),
-            'metadata': msg.metadata,
-        })
+        messages.append(
+            {
+                "id": msg.id,
+                "role": msg.role,
+                "content": msg.content,
+                "created_at": msg.created_at.isoformat(),
+                "metadata": msg.metadata,
+            }
+        )
 
     # Build export data
     data = {
-        'conversation': conversation.to_dict(),
-        'messages': messages,
+        "conversation": conversation.to_dict(),
+        "messages": messages,
     }
 
     if format == "json":
@@ -260,24 +264,24 @@ def import_conversation(
     """
     from djgent.models import Conversation, Message
 
-    conv_data = data.get('conversation', data)
-    messages_data = data.get('messages', [])
+    conv_data = data.get("conversation", data)
+    messages_data = data.get("messages", [])
 
     # Create conversation
     conversation = Conversation.objects.create(
-        agent_name=agent_name or conv_data.get('agent_name', 'imported'),
-        name=conv_data.get('name', ''),
+        agent_name=agent_name or conv_data.get("agent_name", "imported"),
+        name=conv_data.get("name", ""),
         user=user,
-        metadata=conv_data.get('metadata', {}),
+        metadata=conv_data.get("metadata", {}),
     )
 
     # Import messages
     for msg_data in messages_data:
         Message.objects.create(
             conversation=conversation,
-            role=msg_data.get('role', 'human'),
-            content=msg_data.get('content', ''),
-            metadata=msg_data.get('metadata', {}),
+            role=msg_data.get("role", "human"),
+            content=msg_data.get("content", ""),
+            metadata=msg_data.get("metadata", {}),
         )
 
     return str(conversation.id)

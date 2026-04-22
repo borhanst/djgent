@@ -191,9 +191,7 @@ def _get_field_info(f: models.Field) -> FieldInfo:
 
     # Handle related fields (reverse relations don't have choices)
     if isinstance(f, (models.ManyToManyRel, models.ManyToOneRel)):
-        related_model = (
-            f"{f.related_model._meta.app_label}.{f.related_model.__name__}"
-        )
+        related_model = f"{f.related_model._meta.app_label}.{f.related_model.__name__}"
         if isinstance(f, models.ManyToManyRel):
             field_type = f"ManyToMany({related_model})"
         else:
@@ -208,24 +206,18 @@ def _get_field_info(f: models.Field) -> FieldInfo:
 
     # Get choices if available
     if hasattr(f, "choices") and f.choices:
-        choices = [
-            {"value": value, "label": label} for value, label in f.choices
-        ]
+        choices = [{"value": value, "label": label} for value, label in f.choices]
 
     # Handle related fields
     related_model = None
     if isinstance(f, RelatedField):
-        related_model = (
-            f"{f.related_model._meta.app_label}.{f.related_model.__name__}"
-        )
+        related_model = f"{f.related_model._meta.app_label}.{f.related_model.__name__}"
         field_type = f"{field_type}({related_model})"
 
     return FieldInfo(
         name=f.name,
         type=field_type,
-        verbose_name=getattr(f, "verbose_name", f.name)
-        .replace("_", " ")
-        .title(),
+        verbose_name=getattr(f, "verbose_name", f.name).replace("_", " ").title(),
         help_text=getattr(f, "help_text", ""),
         blank=getattr(f, "blank", False),
         null=getattr(f, "null", False),
@@ -388,10 +380,7 @@ def _apply_search(
         # Default: search in text-like fields
         search_fields = []
         for f in model_class._meta.get_fields():
-            if (
-                isinstance(f, (models.CharField, models.TextField))
-                and not f.related_model
-            ):
+            if isinstance(f, (models.CharField, models.TextField)) and not f.related_model:
                 search_fields.append(f.name)
 
     if not search_fields:
@@ -460,9 +449,7 @@ def _model_to_dict(
                 result[field_name] = value
             else:
                 result[field_name] = (
-                    str(value)
-                    if not isinstance(value, (int, float, bool))
-                    else value
+                    str(value) if not isinstance(value, (int, float, bool)) else value
                 )
 
         except Exception:

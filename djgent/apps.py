@@ -44,7 +44,6 @@ class DjgentConfig(AppConfig):
     def _register_admin(self):
         """Register Django admin models."""
         try:
-            from django.contrib import admin
             from djgent import admin as djgent_admin  # noqa: F401
         except ImportError:
             pass  # Admin not available
@@ -85,9 +84,7 @@ class DjgentConfig(AppConfig):
 
         # Get BUILTIN_TOOLS from settings, with default fallback
         djgent_settings = getattr(settings, "DJGENT", {})
-        builtin_tools = djgent_settings.get(
-            "BUILTIN_TOOLS", ["calculator", "datetime"]
-        )
+        builtin_tools = djgent_settings.get("BUILTIN_TOOLS", ["calculator", "datetime"])
 
         # Register each tool specified in BUILTIN_TOOLS
         for tool_name in builtin_tools:

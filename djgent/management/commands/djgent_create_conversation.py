@@ -1,8 +1,7 @@
 """Management command to create a new conversation."""
 
-import uuid
-from django.core.management.base import BaseCommand, CommandError
 from django.contrib.auth import get_user_model
+from django.core.management.base import BaseCommand, CommandError
 
 User = get_user_model()
 
@@ -19,33 +18,19 @@ class Command(BaseCommand):
     help = "Create a new conversation for an agent"
 
     def add_arguments(self, parser):
+        parser.add_argument("--agent", type=str, required=True, help="Name of the agent")
         parser.add_argument(
-            "--agent",
-            type=str,
-            required=True,
-            help="Name of the agent"
+            "--name", type=str, default="", help="Optional name for the conversation"
         )
+        parser.add_argument("--user", type=str, help="Username to associate with the conversation")
         parser.add_argument(
-            "--name",
-            type=str,
-            default="",
-            help="Optional name for the conversation"
-        )
-        parser.add_argument(
-            "--user",
-            type=str,
-            help="Username to associate with the conversation"
-        )
-        parser.add_argument(
-            "--metadata",
-            type=str,
-            default="{}",
-            help="JSON metadata for the conversation"
+            "--metadata", type=str, default="{}", help="JSON metadata for the conversation"
         )
 
     def handle(self, *args, **options):
-        from djgent.models import Conversation
         import json
+
+        from djgent.models import Conversation
 
         agent_name = options["agent"]
         name = options["name"]

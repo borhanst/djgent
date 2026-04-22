@@ -1,6 +1,7 @@
 """Management command to export a conversation."""
 
 import json
+
 from django.core.management.base import BaseCommand, CommandError
 
 
@@ -16,22 +17,13 @@ class Command(BaseCommand):
     help = "Export a conversation to JSON"
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            "--id",
-            type=str,
-            required=True,
-            help="Conversation UUID"
-        )
-        parser.add_argument(
-            "--output",
-            type=str,
-            help="Output file path (default: stdout)"
-        )
+        parser.add_argument("--id", type=str, required=True, help="Conversation UUID")
+        parser.add_argument("--output", type=str, help="Output file path (default: stdout)")
         parser.add_argument(
             "--include-messages",
             action="store_true",
             default=True,
-            help="Include messages in export (default: True)"
+            help="Include messages in export (default: True)",
         )
 
     def handle(self, *args, **options):
@@ -64,8 +56,6 @@ class Command(BaseCommand):
         if output_file:
             with open(output_file, "w") as f:
                 f.write(json_output)
-            self.stdout.write(
-                self.style.SUCCESS(f"Conversation exported to {output_file}")
-            )
+            self.stdout.write(self.style.SUCCESS(f"Conversation exported to {output_file}"))
         else:
             self.stdout.write(json_output)

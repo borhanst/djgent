@@ -51,9 +51,7 @@ def djgent_chat_bubble(
         "bubble_label": label or chat_settings["bubble_label"],
         "bubble_position": chat_settings["bubble_position"],
         "bubble_panel_width": chat_settings["bubble_panel_width"],
-        "bubble_panel_mobile_height": chat_settings[
-            "bubble_panel_mobile_height"
-        ],
+        "bubble_panel_mobile_height": chat_settings["bubble_panel_mobile_height"],
         "iframe_url": iframe_url,
         "full_chat_url": full_chat_url,
     }

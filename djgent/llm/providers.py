@@ -1,6 +1,6 @@
 """LLM provider management."""
 
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict
 
 from djgent.exceptions import LLMError
 from djgent.llm.config import LLMConfig
@@ -182,6 +182,7 @@ def _get_openrouter(config: LLMConfig) -> Any:
     # Use OPENROUTER_API_KEY if not explicitly set
     if not kwargs.get("api_key"):
         from django.conf import settings
+
         djgent_settings = getattr(settings, "DJGENT", {})
         api_keys = djgent_settings.get("API_KEYS", {})
         kwargs["api_key"] = api_keys.get("OPENROUTER", api_keys.get("OPENAI"))

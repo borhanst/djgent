@@ -169,9 +169,7 @@ class AuditLogger:
             else log_to_database
         )
         self.log_to_console = (
-            bool(config.get("LOG_TO_CONSOLE", False))
-            if log_to_console is None
-            else log_to_console
+            bool(config.get("LOG_TO_CONSOLE", False)) if log_to_console is None else log_to_console
         )
         self.log_level = parse_audit_level(
             log_level if log_level is not None else config.get("LOG_LEVEL", "info")
@@ -384,10 +382,7 @@ class AuditLogger:
                 for item in fields(value)
             }
         if isinstance(value, dict):
-            return {
-                str(key): self._safe_detail_value(item)
-                for key, item in value.items()
-            }
+            return {str(key): self._safe_detail_value(item) for key, item in value.items()}
         if isinstance(value, (list, tuple)):
             return [self._safe_detail_value(item) for item in value]
         if isinstance(value, (str, int, float, bool)) or value is None:
