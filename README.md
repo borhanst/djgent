@@ -1,10 +1,12 @@
 # Djgent
 
+Pronounced **DJ agent**.
+
 **Django AI Agent Framework** - Build AI agents with LangChain integration in Django applications.
 
 [![PyPI](https://img.shields.io/pypi/v/djgent.svg)](https://pypi.org/project/djgent/)
 [![GitHub](https://img.shields.io/github/license/borhanst/djgent)](https://github.com/borhanst/djgent/blob/main/LICENSE)
-[![Python Support](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python Support](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Django Support](https://img.shields.io/badge/Django-5.2%20%7C%206.0-green.svg)](https://www.djangoproject.com/)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 
@@ -1044,10 +1046,10 @@ uv build
 
 ```bash
 # Publish to TestPyPI first
-uv publish --publish-url https://test.pypi.org/legacy/ --token pypi-YOUR-TESTPYPI-TOKEN dist/djgent-0.3.1.tar.gz dist/djgent-0.3.1-py3-none-any.whl
+uv publish --publish-url https://test.pypi.org/legacy/ --token pypi-YOUR-TESTPYPI-TOKEN dist/djgent-0.3.2.tar.gz dist/djgent-0.3.2-py3-none-any.whl
 
 # Publish to PyPI after TestPyPI install verification
-uv publish --token pypi-YOUR-PYPI-TOKEN dist/djgent-0.3.1.tar.gz dist/djgent-0.3.1-py3-none-any.whl
+uv publish --token pypi-YOUR-PYPI-TOKEN dist/djgent-0.3.2.tar.gz dist/djgent-0.3.2-py3-none-any.whl
 ```
 
 ## License
@@ -1066,9 +1068,10 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Changelog
 
-### 0.3.1 (2026-04-22)
+### 0.3.2 (2026-04-22)
 - Fixed configured chat input placeholders in the built-in chat UI
 - Cleaned up package formatting and release verification
+- Added Python 3.10 support in package metadata and documentation
 - Marked planned chain execution as coming soon
 
 ### 0.3.0 (2026-04-20)

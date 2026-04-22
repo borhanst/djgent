@@ -5,11 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.1] - 2026-04-22
+## [0.3.2] - 2026-04-22
 
 ### Fixed
 - Render configured chat input placeholders in the built-in chat UI.
 - Clean up package formatting and lint issues for release verification.
+- Declare Python 3.10 support in package metadata and documentation.
+- Document that Djgent is pronounced "DJ agent".
 
 
 ## [0.3.0] - 2026-04-20
@@ -47,5 +49,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Coming Soon
 - Simple chain execution for sequential tool and agent workflows.
 
-[0.3.1]: https://pypi.org/project/djgent/0.3.1/
+[0.3.2]: https://pypi.org/project/djgent/0.3.2/
 [0.3.0]: https://pypi.org/project/djgent/0.3.0/
