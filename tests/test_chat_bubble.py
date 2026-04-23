@@ -41,7 +41,7 @@ class TestChatBubble:
         html = _render_bubble(request)
 
         assert "data-djgent-chat-bubble" in html
-        assert 'data-src="/embed/"' in html
+        assert 'data-src="/chat/embed/"' in html
         assert "Ask Djgent" in html
 
     def test_bubble_not_rendered_on_chat_pages(self, settings) -> None:
@@ -63,8 +63,8 @@ class TestChatBubble:
         settings.DJGENT = _chat_settings()
         client = Client()
 
-        embed_response = client.get("/embed/")
-        home_response = client.get("/")
+        embed_response = client.get("/chat/embed/")
+        home_response = client.get("/chat/")
 
         assert embed_response.status_code == 200
         assert b"chat-embed-shell" in embed_response.content

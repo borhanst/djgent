@@ -207,6 +207,7 @@ from djgent.chat import BaseChatView
 
 class SupportChatView(BaseChatView):
     agent_name = "support-chat"
+    detail_url_name = "detail"
     chat_title = "Support Chat"
     system_prompt = "You are the support assistant for our product."
     tools = ["calculator", "datetime", "search"]

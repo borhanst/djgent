@@ -27,7 +27,7 @@ class TestBuiltInChatUi:
         self._configure(settings)
         client = Client()
 
-        response = client.get("/")
+        response = client.get("/chat/")
 
         assert response.status_code == 200
         assert b"Test Chat" in response.content
@@ -38,7 +38,7 @@ class TestBuiltInChatUi:
         settings.DJGENT["CHAT_UI"]["INPUT_PLACEHOLDER"] = "Ask the release assistant"
         client = Client()
 
-        response = client.get("/")
+        response = client.get("/chat/")
 
         assert response.status_code == 200
         assert b'placeholder="Ask the release assistant"' in response.content
@@ -58,7 +58,7 @@ class TestBuiltInChatUi:
                 runner.return_value = {"output": "Hello from Djgent"}
 
                 response = client.post(
-                    "/api/chat/",
+                    "/chat/api/chat/",
                     data='{"message":"Hello"}',
                     content_type="application/json",
                 )
@@ -92,7 +92,7 @@ class TestBuiltInChatUi:
                 ]
 
                 response = client.post(
-                    "/api/chat/",
+                    "/chat/api/chat/",
                     data='{"message":"Hello","stream":true}',
                     content_type="application/json",
                 )
@@ -117,7 +117,7 @@ class TestBuiltInChatUi:
         client = Client()
 
         response = client.post(
-            "/api/chat/",
+            "/chat/api/chat/",
             data='{"message":""}',
             content_type="application/json",
             HTTP_ACCEPT="text/event-stream",
@@ -135,7 +135,7 @@ class TestBuiltInChatUi:
         client = Client()
 
         response = client.post(
-            "/api/chat/",
+            "/chat/api/chat/",
             data='{"message":"Hello","stream":true}',
             content_type="application/json",
         )
@@ -162,7 +162,7 @@ class TestBuiltInChatUi:
                 runner.return_value = {"output": "Hello without stream"}
 
                 response = client.post(
-                    "/api/chat/",
+                    "/chat/api/chat/",
                     data='{"message":"Hello","stream":true}',
                     content_type="application/json",
                     HTTP_ACCEPT="text/event-stream",
@@ -177,11 +177,26 @@ class TestBuiltInChatUi:
         settings.DJGENT["CHAT_UI"]["STREAMING"] = False
         client = Client()
 
-        response = client.get("/")
+        response = client.get("/chat/")
 
         assert response.status_code == 200
         assert b"streamingEnabled: false" in response.content
         assert b'id="stream-status"' not in response.content
+
+    def test_new_conversation_creates_blank_conversation(self, settings) -> None:
+        self._configure(settings)
+        client = Client()
+
+        response = client.post("/chat/api/conversations/new/")
+
+        assert response.status_code == 200
+        data = response.json()
+        conversation = Conversation.objects.get(
+            id=data["conversation_id"],
+            agent_name="djgent-chat",
+        )
+        assert conversation.name == ""
+        assert data["redirect_url"] == f"/chat/{conversation.id}/"
 
     def test_anonymous_user_can_only_access_session_conversation(self, settings) -> None:
         self._configure(settings)
@@ -232,7 +247,7 @@ class TestBuiltInChatUi:
 
         client.force_login(current_user)
 
-        home_response = client.get("/")
+        home_response = client.get("/chat/")
         own_response = client.get(f"/chat/{own_conversation.id}/")
         other_response = client.get(f"/chat/{other_conversation.id}/")
 
@@ -337,14 +352,26 @@ class TestCustomChatView:
         assert response.status_code == 200
         assert b"chat-embed-shell" in response.content
 
-    def test_new_conversation_endpoint_uses_custom_home_url(self, settings) -> None:
+    def test_new_conversation_endpoint_creates_and_redirects_to_detail(
+        self, settings
+    ) -> None:
         self._configure(settings)
         client = Client()
 
         response = client.post("/api/conversations/new/")
 
         assert response.status_code == 200
-        assert response.json()["redirect_url"] == "/"
+        data = response.json()
+        conversation = Conversation.objects.get(
+            id=data["conversation_id"],
+            agent_name="custom-chat",
+        )
+        assert conversation.name == ""
+        assert data["conversation"]["name"] == "Untitled chat"
+        assert data["redirect_url"] == f"/chat/{conversation.id}/"
+
+        session = client.session
+        assert str(conversation.id) in session["djgent_chat_conversation_ids"]
 
     def test_custom_view_anonymous_access_is_session_scoped(self, settings) -> None:
         self._configure(settings)

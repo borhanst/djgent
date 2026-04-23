@@ -17,6 +17,7 @@ class ExampleChatView(BaseChatView):
     session_key = "djgent_example_conversation_ids"
     template_name = "chat_ui/chat.html"
     home_url_name = "chat-home"
+    detail_url_name = "chat-detail"
     message_url_name = "chat-message"
     new_conversation_url_name = "chat-new"
     page_title = "Djgent Chat Demo"

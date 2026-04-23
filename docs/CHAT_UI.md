@@ -59,6 +59,7 @@ from djgent.chat import BaseChatView
 
 class SupportChatView(BaseChatView):
     agent_name = "support-chat"
+    detail_url_name = "detail"
     page_title = "Support Chat"
     chat_title = "Support Chat"
     chat_subtitle = "Chat with the support agent."
@@ -109,7 +110,8 @@ urlpatterns = [
 - `page_view()` for the main chat page
 - `embed_view()` for iframe/embed mode
 - `message_view()` for posting messages
-- `new_conversation_view()` for resetting the current thread
+- `new_conversation_view()` for creating a blank conversation and returning its
+  detail-page redirect URL
 - conversation access control for authenticated and anonymous users
 - database-backed conversation history using the agent name returned by
   `get_agent_name()`
@@ -164,6 +166,7 @@ Required:
 Optional overrides:
 
 - `get_agent_name()`
+- `detail_url_name`
 - `get_page_title()`
 - `get_chat_title()`
 - `get_chat_subtitle()`

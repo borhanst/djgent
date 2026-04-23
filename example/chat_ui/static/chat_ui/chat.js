@@ -216,18 +216,27 @@ document.addEventListener("click", (event) => {
 });
 
 async function handleNewChat() {
+    let data = null;
     try {
-        await postJson(config.newChatUrl, {});
+        data = await postJson(config.newChatUrl, {});
     } catch (_error) {
-        // Reset locally.
+        data = null;
     }
 
-    conversationIdEl.value = "";
+    if (data && data.redirect_url) {
+        window.location.assign(data.redirect_url);
+        return;
+    }
+
+    conversationIdEl.value = data && data.conversation_id ? data.conversation_id : "";
     chatTitleEl.textContent = "New conversation";
     currentMessages = [];
     isPending = false;
     renderMessages(currentMessages);
-    window.history.replaceState({}, "", "/");
+    if (data) {
+        renderConversationList(data.conversations || [], data.conversation_id || null);
+    }
+    window.history.replaceState({}, "", data && data.redirect_url ? data.redirect_url : "/");
     inputEl.focus();
 }
 

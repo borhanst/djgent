@@ -5,7 +5,7 @@ from typing import Any, Optional
 from django.conf import settings
 from django.db import models
 from django.http import Http404, JsonResponse, StreamingHttpResponse
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_GET, require_POST
@@ -321,8 +321,8 @@ class BaseChatView(ABC):
     ) -> dict[str, Any]:
         selected_conversation = None
         if conversation_id:
-            selected_conversation = self.get_conversation_or_404(
-                request, conversation_id
+            selected_conversation = get_object_or_404(
+                Conversation, id=conversation_id
             )
 
         conversations = [
@@ -455,7 +455,7 @@ class BaseChatView(ABC):
         def event_stream():
             try:
                 if conversation_id:
-                    self.get_conversation_or_404(request, conversation_id)
+                    get_object_or_404(Conversation, id=conversation_id)
 
                 agent = self.build_agent(
                     request, conversation_id=conversation_id
