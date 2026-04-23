@@ -18,6 +18,7 @@ DJGENT = {
         "TITLE": "Support Copilot",
         "TOOLS": ["calculator", "datetime", "search"],
         "AUTO_LOAD_TOOLS": True,
+        "STREAMING": True,
         "SYSTEM_PROMPT": "You are the support assistant for our product.",
         "BUBBLE_ENABLED": True,
         "BUBBLE_TITLE": "Ask Support",
@@ -112,6 +113,47 @@ urlpatterns = [
 - conversation access control for authenticated and anonymous users
 - database-backed conversation history using the agent name returned by
   `get_agent_name()`
+
+## Streaming Responses
+
+`message_view()` keeps the normal JSON response by default. To receive
+server-sent events instead, send `stream: true` in the JSON body or set
+`Accept: text/event-stream`:
+
+```javascript
+const response = await fetch("/ai/api/chat/", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+  },
+  body: JSON.stringify({
+    message: "Summarize this conversation",
+    conversation_id: currentConversationId,
+    stream: true,
+  }),
+});
+```
+
+The stream emits:
+
+- `event` for agent runtime events
+- `message` for the final assistant message
+- `done` with the same conversation metadata as the JSON response
+- `error` for validation, provider, or execution failures
+
+Streaming is enabled by default for `ConfiguredChatView`. Disable it with:
+
+```python
+DJGENT = {
+    "CHAT_UI": {
+        "STREAMING": False,
+    },
+}
+```
+
+When disabled, stream requests fall back to the normal JSON response and the
+built-in browser UI uses non-streaming posts.
 
 ## Subclass Contract
 

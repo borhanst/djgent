@@ -169,6 +169,7 @@ DJGENT = {
         "TITLE": "Support Copilot",
         "TOOLS": ["calculator", "datetime", "search"],
         "AUTO_LOAD_TOOLS": True,
+        "STREAMING": True,
         "SYSTEM_PROMPT": "You are the support assistant for our product.",
         "BUBBLE_ENABLED": True,
         "BUBBLE_TITLE": "Ask Support",
@@ -231,6 +232,8 @@ Chat views auto-load registered tools by default. A tool registered with
 `@tool` or app `tools.py` auto-discovery is available to the chat agent without
 adding its name to `CHAT_UI["TOOLS"]`; set
 `AUTO_LOAD_TOOLS=False` for explicit-only tool lists.
+Streaming chat responses are enabled by default; set `STREAMING=False` to use
+plain JSON posts in the built-in browser UI.
 
 Register it with:
 

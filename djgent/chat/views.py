@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 from django.conf import settings
 from django.db import models
-from django.http import Http404, JsonResponse
+from django.http import Http404, JsonResponse, StreamingHttpResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_sameorigin
@@ -12,7 +12,10 @@ from django.views.decorators.http import require_GET, require_POST
 
 from djgent import Agent
 from djgent.models import Conversation
-from djgent.utils.agent_runner import run_agent_with_request
+from djgent.utils.agent_runner import (
+    run_agent_with_request,
+    stream_agent_with_request,
+)
 
 SESSION_KEY = "djgent_chat_conversation_ids"
 DEFAULT_SYSTEM_PROMPT = (
@@ -55,6 +58,7 @@ class BaseChatView(ABC):
     system_prompt = DEFAULT_SYSTEM_PROMPT
     tools = ["calculator", "datetime"]
     auto_load_tools = True
+    streaming_enabled = True
     agent_name = "djgent-chat"
 
     # Pagination / display limits
@@ -123,6 +127,9 @@ class BaseChatView(ABC):
     def get_auto_load_tools(self) -> bool:
         return bool(self.auto_load_tools)
 
+    def get_streaming_enabled(self) -> bool:
+        return bool(self.streaming_enabled)
+
     def get_template_name(self) -> str:
         return self.template_name
 
@@ -136,7 +143,9 @@ class BaseChatView(ABC):
         return self.session_key
 
     def get_route_name(self, request, url_name: str) -> str:
-        namespace = getattr(getattr(request, "resolver_match", None), "namespace", "")
+        namespace = getattr(
+            getattr(request, "resolver_match", None), "namespace", ""
+        )
         return f"{namespace}:{url_name}" if namespace else url_name
 
     def get_home_url(self, request) -> str:
@@ -149,9 +158,13 @@ class BaseChatView(ABC):
         return reverse(self.get_route_name(request, self.message_url_name))
 
     def get_new_conversation_url(self, request) -> str:
-        return reverse(self.get_route_name(request, self.new_conversation_url_name))
+        return reverse(
+            self.get_route_name(request, self.new_conversation_url_name)
+        )
 
-    def get_conversation_path_prefix(self, request, *, embed: bool = False) -> str:
+    def get_conversation_path_prefix(
+        self, request, *, embed: bool = False
+    ) -> str:
         if embed:
             return self.get_embed_url(request)
         return f"{self.get_home_url(request)}{self.conversation_path_segment}"
@@ -163,7 +176,9 @@ class BaseChatView(ABC):
     def get_provider_status(self) -> dict[str, Any]:
         djgent_settings = getattr(settings, "DJGENT", {}) or {}
         provider_string = djgent_settings.get("DEFAULT_LLM", "")
-        provider = provider_string.split(":", 1)[0].lower() if provider_string else ""
+        provider = (
+            provider_string.split(":", 1)[0].lower() if provider_string else ""
+        )
         api_keys = djgent_settings.get("API_KEYS", {}) or {}
 
         if provider == "ollama":
@@ -171,7 +186,8 @@ class BaseChatView(ABC):
                 "provider": provider_string,
                 "configured": True,
                 "message": (
-                    "Configured for Ollama. Make sure the Ollama server is " "running locally."
+                    "Configured for Ollama. Make sure the Ollama server is "
+                    "running locally."
                 ),
             }
 
@@ -206,7 +222,9 @@ class BaseChatView(ABC):
     def get_session_conversation_ids(self, request) -> list[str]:
         return list(request.session.get(self.get_session_key(), []))
 
-    def save_session_conversation_ids(self, request, conversation_ids: list[str]) -> None:
+    def save_session_conversation_ids(
+        self, request, conversation_ids: list[str]
+    ) -> None:
         request.session[self.get_session_key()] = conversation_ids
         request.session.modified = True
 
@@ -221,9 +239,9 @@ class BaseChatView(ABC):
 
     def get_conversation_queryset(self, request) -> models.QuerySet:
         user = self.get_active_user(request)
-        queryset = Conversation.objects.filter(agent_name=self.get_agent_name()).order_by(
-            "-updated_at"
-        )
+        queryset = Conversation.objects.filter(
+            agent_name=self.get_agent_name()
+        ).order_by("-updated_at")
 
         if user:
             return queryset.filter(user=user)
@@ -233,13 +251,21 @@ class BaseChatView(ABC):
             return queryset.none()
         return queryset.filter(user__isnull=True, id__in=conversation_ids)
 
-    def get_conversation_or_404(self, request, conversation_id: str) -> Conversation:
-        conversation = self.get_conversation_queryset(request).filter(id=conversation_id).first()
+    def get_conversation_or_404(
+        self, request, conversation_id: str
+    ) -> Conversation:
+        conversation = (
+            self.get_conversation_queryset(request)
+            .filter(id=conversation_id)
+            .first()
+        )
         if not conversation:
             raise Http404("Conversation not found.")
         return conversation
 
-    def serialize_conversation(self, conversation: Conversation) -> dict[str, Any]:
+    def serialize_conversation(
+        self, conversation: Conversation
+    ) -> dict[str, Any]:
         last_message = conversation.messages.order_by("-created_at").first()
         return {
             "id": str(conversation.id),
@@ -253,7 +279,9 @@ class BaseChatView(ABC):
             ),
         }
 
-    def serialize_messages(self, conversation: Optional[Conversation]) -> list[dict[str, Any]]:
+    def serialize_messages(
+        self, conversation: Optional[Conversation]
+    ) -> list[dict[str, Any]]:
         if not conversation:
             return []
 
@@ -268,14 +296,19 @@ class BaseChatView(ABC):
         ]
 
     @abstractmethod
-    def build_agent(self, request, conversation_id: Optional[str] = None) -> Agent:
+    def build_agent(
+        self, request, conversation_id: Optional[str] = None
+    ) -> Agent:
         """Return an Agent instance for handling chat messages."""
 
-    def maybe_name_conversation(self, conversation: Conversation, prompt: str) -> None:
+    def maybe_name_conversation(
+        self, conversation: Conversation, prompt: str
+    ) -> None:
         if conversation.name:
             return
         conversation.name = (
-            prompt.strip()[: self.default_conversation_name_length] or "Untitled chat"
+            prompt.strip()[: self.default_conversation_name_length]
+            or "Untitled chat"
         )
         conversation.save(update_fields=["name", "updated_at"])
 
@@ -288,11 +321,15 @@ class BaseChatView(ABC):
     ) -> dict[str, Any]:
         selected_conversation = None
         if conversation_id:
-            selected_conversation = self.get_conversation_or_404(request, conversation_id)
+            selected_conversation = self.get_conversation_or_404(
+                request, conversation_id
+            )
 
         conversations = [
             self.serialize_conversation(item)
-            for item in self.get_conversation_queryset(request)[: self.max_sidebar_conversations]
+            for item in self.get_conversation_queryset(request)[
+                : self.max_sidebar_conversations
+            ]
         ]
         tools = self.get_tool_names()
 
@@ -314,19 +351,26 @@ class BaseChatView(ABC):
             "chat_api_url": self.get_message_url(request),
             "new_chat_url": self.get_new_conversation_url(request),
             "chat_base_url": self.get_home_url(request),
-            "conversation_path_prefix": self.get_conversation_path_prefix(request, embed=embed),
+            "conversation_path_prefix": self.get_conversation_path_prefix(
+                request, embed=embed
+            ),
             "history_updates_enabled": not embed,
+            "streaming_enabled": self.get_streaming_enabled(),
             "is_embed": embed,
         }
 
-    def render_page(self, request, conversation_id: Optional[str] = None) -> Any:
+    def render_page(
+        self, request, conversation_id: Optional[str] = None
+    ) -> Any:
         return render(
             request,
             self.get_template_name(),
             self.get_page_context(request, conversation_id=conversation_id),
         )
 
-    def render_embed(self, request, conversation_id: Optional[str] = None) -> Any:
+    def render_embed(
+        self, request, conversation_id: Optional[str] = None
+    ) -> Any:
         return render(
             request,
             self.get_embed_template_name(),
@@ -344,41 +388,38 @@ class BaseChatView(ABC):
             conversation_ids.clear()
             self.save_session_conversation_ids(request, conversation_ids)
 
-        return JsonResponse({"ok": True, "redirect_url": self.get_home_url(request)})
+        return JsonResponse(
+            {"ok": True, "redirect_url": self.get_home_url(request)}
+        )
 
-    def post_message(self, request) -> JsonResponse:
-        provider_status = self.get_provider_status()
-        if not provider_status["configured"]:
-            return JsonResponse(
-                {"ok": False, "error": provider_status["message"]},
-                status=400,
-            )
+    def wants_stream(self, request, payload: dict[str, Any]) -> bool:
+        if not self.get_streaming_enabled():
+            return False
+        accept_header = request.headers.get("Accept", "")
+        return (
+            bool(payload.get("stream")) or "text/event-stream" in accept_header
+        )
 
+    def parse_message_payload(
+        self, request
+    ) -> tuple[Optional[dict[str, Any]], Optional[str]]:
         try:
             payload = json.loads(request.body.decode("utf-8"))
         except json.JSONDecodeError:
-            return JsonResponse(
-                {"ok": False, "error": "Invalid JSON payload."},
-                status=400,
-            )
+            return None, "Invalid JSON payload."
 
         message = (payload.get("message") or "").strip()
-        conversation_id = payload.get("conversation_id") or None
         if not message:
-            return JsonResponse(
-                {"ok": False, "error": "Message is required."},
-                status=400,
-            )
+            return payload, "Message is required."
 
-        if conversation_id:
-            self.get_conversation_or_404(request, conversation_id)
+        return payload, None
 
-        try:
-            agent = self.build_agent(request, conversation_id=conversation_id)
-            result = run_agent_with_request(agent, request, message)
-        except Exception as exc:
-            return JsonResponse({"ok": False, "error": str(exc)}, status=500)
-
+    def get_response_conversation_data(
+        self,
+        request,
+        agent: Agent,
+        message: str,
+    ) -> tuple[Optional[str], list[dict[str, Any]]]:
         new_conversation_id = agent.get_conversation_id()
         conversation = (
             Conversation.objects.filter(
@@ -394,8 +435,149 @@ class BaseChatView(ABC):
 
         conversations = [
             self.serialize_conversation(item)
-            for item in self.get_conversation_queryset(request)[: self.max_sidebar_conversations]
+            for item in self.get_conversation_queryset(request)[
+                : self.max_sidebar_conversations
+            ]
         ]
+        return new_conversation_id, conversations
+
+    def sse_event(self, event: str, data: dict[str, Any]) -> str:
+        return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
+
+    def stream_message_response(
+        self,
+        request,
+        payload: dict[str, Any],
+    ) -> StreamingHttpResponse:
+        message = (payload.get("message") or "").strip()
+        conversation_id = payload.get("conversation_id") or None
+
+        def event_stream():
+            try:
+                if conversation_id:
+                    self.get_conversation_or_404(request, conversation_id)
+
+                agent = self.build_agent(
+                    request, conversation_id=conversation_id
+                )
+                final_output = ""
+                for item in stream_agent_with_request(agent, request, message):
+                    if isinstance(item, dict):
+                        yield self.sse_event("event", item)
+                    else:
+                        final_output = str(item)
+                        yield self.sse_event(
+                            "message",
+                            {
+                                "role": "ai",
+                                "content": final_output,
+                            },
+                        )
+
+                new_conversation_id, conversations = (
+                    self.get_response_conversation_data(
+                        request,
+                        agent,
+                        message,
+                    )
+                )
+                yield self.sse_event(
+                    "done",
+                    {
+                        "ok": True,
+                        "conversation_id": new_conversation_id,
+                        "message": {
+                            "role": "ai",
+                            "content": final_output,
+                        },
+                        "conversations": conversations,
+                    },
+                )
+            except Exception as exc:
+                yield self.sse_event("error", {"ok": False, "error": str(exc)})
+
+        response = StreamingHttpResponse(
+            event_stream(), content_type="text/event-stream"
+        )
+        response["Cache-Control"] = "no-cache"
+        return response
+
+    def post_message(self, request):
+        payload, error = self.parse_message_payload(request)
+        stream_requested = (
+            self.wants_stream(request, payload)
+            if payload is not None
+            else "text/event-stream" in request.headers.get("Accept", "")
+        )
+
+        provider_status = self.get_provider_status()
+        if not provider_status["configured"]:
+            if stream_requested:
+                response = StreamingHttpResponse(
+                    [
+                        self.sse_event(
+                            "error",
+                            {"ok": False, "error": provider_status["message"]},
+                        )
+                    ],
+                    content_type="text/event-stream",
+                    status=400,
+                )
+                response["Cache-Control"] = "no-cache"
+                return response
+            return JsonResponse(
+                {"ok": False, "error": provider_status["message"]},
+                status=400,
+            )
+
+        if payload is None:
+            if stream_requested:
+                response = StreamingHttpResponse(
+                    [self.sse_event("error", {"ok": False, "error": error})],
+                    content_type="text/event-stream",
+                    status=400,
+                )
+                response["Cache-Control"] = "no-cache"
+                return response
+            return JsonResponse(
+                {"ok": False, "error": error},
+                status=400,
+            )
+        if stream_requested:
+            if error:
+                response = StreamingHttpResponse(
+                    [self.sse_event("error", {"ok": False, "error": error})],
+                    content_type="text/event-stream",
+                    status=400,
+                )
+                response["Cache-Control"] = "no-cache"
+                return response
+            return self.stream_message_response(request, payload)
+
+        message = (payload.get("message") or "").strip()
+        conversation_id = payload.get("conversation_id") or None
+        if error:
+            return JsonResponse(
+                {"ok": False, "error": error},
+                status=400,
+            )
+
+        if conversation_id:
+            self.get_conversation_or_404(request, conversation_id)
+
+        try:
+            agent = self.build_agent(request, conversation_id=conversation_id)
+            result = run_agent_with_request(agent, request, message)
+        except Exception as exc:
+            return JsonResponse({"ok": False, "error": str(exc)}, status=500)
+
+        new_conversation_id, conversations = (
+            self.get_response_conversation_data(
+                request,
+                agent,
+                message,
+            )
+        )
 
         return JsonResponse(
             {
@@ -422,16 +604,33 @@ class ConfiguredChatView(BaseChatView):
             "page_title": chat_settings.get("PAGE_TITLE", title),
             "title": title,
             "subtitle": chat_settings.get("SUBTITLE", self.chat_subtitle),
-            "system_prompt": chat_settings.get("SYSTEM_PROMPT", BaseChatView.system_prompt),
+            "system_prompt": chat_settings.get(
+                "SYSTEM_PROMPT", BaseChatView.system_prompt
+            ),
             "tools": list(chat_settings.get("TOOLS", self.tools)),
-            "auto_load_tools": chat_settings.get("AUTO_LOAD_TOOLS", self.auto_load_tools),
-            "welcome_message": chat_settings.get("WELCOME_MESSAGE", self.welcome_message),
-            "input_placeholder": chat_settings.get("INPUT_PLACEHOLDER", self.input_placeholder),
+            "auto_load_tools": chat_settings.get(
+                "AUTO_LOAD_TOOLS", self.auto_load_tools
+            ),
+            "streaming_enabled": chat_settings.get(
+                "STREAMING", self.streaming_enabled
+            ),
+            "welcome_message": chat_settings.get(
+                "WELCOME_MESSAGE", self.welcome_message
+            ),
+            "input_placeholder": chat_settings.get(
+                "INPUT_PLACEHOLDER", self.input_placeholder
+            ),
             "bubble_enabled": chat_settings.get("BUBBLE_ENABLED", False),
             "bubble_title": chat_settings.get("BUBBLE_TITLE", "Ask Djgent"),
-            "bubble_label": chat_settings.get("BUBBLE_LABEL", "Open Djgent chat"),
-            "bubble_position": chat_settings.get("BUBBLE_POSITION", "bottom-right"),
-            "bubble_panel_width": chat_settings.get("BUBBLE_PANEL_WIDTH", "420px"),
+            "bubble_label": chat_settings.get(
+                "BUBBLE_LABEL", "Open Djgent chat"
+            ),
+            "bubble_position": chat_settings.get(
+                "BUBBLE_POSITION", "bottom-right"
+            ),
+            "bubble_panel_width": chat_settings.get(
+                "BUBBLE_PANEL_WIDTH", "420px"
+            ),
             "bubble_panel_mobile_height": chat_settings.get(
                 "BUBBLE_PANEL_MOBILE_HEIGHT",
                 "78vh",
@@ -462,10 +661,15 @@ class ConfiguredChatView(BaseChatView):
     def get_auto_load_tools(self) -> bool:
         return bool(self.get_settings()["auto_load_tools"])
 
+    def get_streaming_enabled(self) -> bool:
+        return bool(self.get_settings()["streaming_enabled"])
+
     def get_system_prompt(self) -> str:
         return self.get_settings()["system_prompt"]
 
-    def build_agent(self, request, conversation_id: Optional[str] = None) -> Agent:
+    def build_agent(
+        self, request, conversation_id: Optional[str] = None
+    ) -> Agent:
         return Agent.create(
             name=self.get_agent_name(),
             tools=self.get_tool_names(),

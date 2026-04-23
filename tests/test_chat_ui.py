@@ -74,6 +74,115 @@ class TestBuiltInChatUi:
         )
         assert conversation.name == "Hello"
 
+    def test_post_message_can_stream_response_events(self, settings) -> None:
+        self._configure(settings)
+        client = Client()
+        conversation = Conversation.objects.create(
+            agent_name="djgent-chat",
+            name="",
+        )
+
+        with patch("djgent.chat.views.ConfiguredChatView.build_agent") as build_agent:
+            build_agent.return_value.get_conversation_id.return_value = str(conversation.id)
+
+            with patch("djgent.chat.views.stream_agent_with_request") as streamer:
+                streamer.return_value = [
+                    {"type": "run.start", "thread_id": str(conversation.id)},
+                    "Hello from stream",
+                ]
+
+                response = client.post(
+                    "/api/chat/",
+                    data='{"message":"Hello","stream":true}',
+                    content_type="application/json",
+                )
+                body = b"".join(response.streaming_content).decode("utf-8")
+
+        assert response.status_code == 200
+        assert response["Content-Type"] == "text/event-stream"
+        assert "event: event" in body
+        assert '"type": "run.start"' in body
+        assert "event: message" in body
+        assert '"content": "Hello from stream"' in body
+        assert "event: done" in body
+
+        conversation = Conversation.objects.get(
+            id=conversation.id,
+            agent_name="djgent-chat",
+        )
+        assert conversation.name == "Hello"
+
+    def test_stream_message_validation_errors_use_sse(self, settings) -> None:
+        self._configure(settings)
+        client = Client()
+
+        response = client.post(
+            "/api/chat/",
+            data='{"message":""}',
+            content_type="application/json",
+            HTTP_ACCEPT="text/event-stream",
+        )
+
+        assert response.status_code == 400
+        assert response["Content-Type"] == "text/event-stream"
+        body = b"".join(response.streaming_content).decode("utf-8")
+        assert "event: error" in body
+        assert '"error": "Message is required."' in body
+
+    def test_stream_message_provider_errors_use_sse(self, settings) -> None:
+        self._configure(settings)
+        settings.DJGENT["API_KEYS"] = {"OPENAI": ""}
+        client = Client()
+
+        response = client.post(
+            "/api/chat/",
+            data='{"message":"Hello","stream":true}',
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert response["Content-Type"] == "text/event-stream"
+        body = b"".join(response.streaming_content).decode("utf-8")
+        assert "event: error" in body
+        assert '"ok": false' in body
+
+    def test_streaming_can_be_disabled_in_chat_settings(self, settings) -> None:
+        self._configure(settings)
+        settings.DJGENT["CHAT_UI"]["STREAMING"] = False
+        client = Client()
+        conversation = Conversation.objects.create(
+            agent_name="djgent-chat",
+            name="",
+        )
+
+        with patch("djgent.chat.views.ConfiguredChatView.build_agent") as build_agent:
+            build_agent.return_value.get_conversation_id.return_value = str(conversation.id)
+
+            with patch("djgent.chat.views.run_agent_with_request") as runner:
+                runner.return_value = {"output": "Hello without stream"}
+
+                response = client.post(
+                    "/api/chat/",
+                    data='{"message":"Hello","stream":true}',
+                    content_type="application/json",
+                    HTTP_ACCEPT="text/event-stream",
+                )
+
+        assert response.status_code == 200
+        assert response["Content-Type"] == "application/json"
+        assert response.json()["message"]["content"] == "Hello without stream"
+
+    def test_streaming_setting_is_exposed_to_templates(self, settings) -> None:
+        self._configure(settings)
+        settings.DJGENT["CHAT_UI"]["STREAMING"] = False
+        client = Client()
+
+        response = client.get("/")
+
+        assert response.status_code == 200
+        assert b"streamingEnabled: false" in response.content
+        assert b'id="stream-status"' not in response.content
+
     def test_anonymous_user_can_only_access_session_conversation(self, settings) -> None:
         self._configure(settings)
         client = Client()
@@ -152,6 +261,17 @@ class TestBuiltInChatUi:
             ConfiguredChatView().build_agent(request)
 
         assert create.call_args.kwargs["auto_load_tools"] is False
+
+    def test_configured_chat_streaming_defaults_to_enabled(self, settings) -> None:
+        self._configure(settings)
+
+        assert ConfiguredChatView().get_streaming_enabled() is True
+
+    def test_configured_chat_can_disable_streaming(self, settings) -> None:
+        self._configure(settings)
+        settings.DJGENT["CHAT_UI"]["STREAMING"] = False
+
+        assert ConfiguredChatView().get_streaming_enabled() is False
 
 
 @pytest.mark.django_db

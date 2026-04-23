@@ -68,6 +68,7 @@
             chatBaseUrl: "{{ chat_base_url }}",
             conversationPathPrefix: "{{ conversation_path_prefix }}",
             historyUpdatesEnabled: {{ history_updates_enabled|yesno:"true,false" }},
+            streamingEnabled: {{ streaming_enabled|yesno:"true,false" }},
             selectedConversationId: "{% if selected_conversation %}{{ selected_conversation.id }}{% endif %}"
         };
     </script>

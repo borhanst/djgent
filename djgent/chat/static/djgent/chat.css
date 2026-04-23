@@ -357,6 +357,7 @@ body::before {
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
 }
 
 #chat-title {
@@ -366,6 +367,43 @@ body::before {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.stream-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 160px;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    background: var(--bg-badge);
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    font-weight: 500;
+    line-height: 1.5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+}
+
+.stream-status::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-tertiary);
+}
+
+.stream-status.is-active {
+    color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.stream-status.is-active::before {
+    background: var(--accent);
+    animation: streamPulse 1.1s ease-in-out infinite;
 }
 
 .model-chip {
@@ -829,6 +867,11 @@ body::before {
     to { transform: rotate(360deg); }
 }
 
+@keyframes streamPulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.85); }
+    50% { opacity: 1; transform: scale(1.15); }
+}
+
 @keyframes pageIn {
     from { opacity: 0; }
     to   { opacity: 1; }
@@ -889,6 +932,10 @@ a:focus:not(:focus-visible) {
     .tools-chip {
         display: none;
     }
+
+    .stream-status {
+        max-width: 110px;
+    }
 }
 
 @media (max-width: 480px) {
@@ -898,6 +945,10 @@ a:focus:not(:focus-visible) {
 
     .model-chip {
         display: none;
+    }
+
+    .stream-status {
+        max-width: 92px;
     }
 
     .composer-footer {

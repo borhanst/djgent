@@ -94,6 +94,7 @@ DJGENT = {
             "You are the Djgent demo assistant. Use book_query for questions "
             "about demo books, authors, genres, or publication years."
         ),
+        "STREAMING": True,
     },
     "MODEL_QUERY_TOOL": {
         "ENABLED": False,

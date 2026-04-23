@@ -6,6 +6,9 @@
                 <h1 id="chat-title">
                     {% if selected_conversation %}{{ selected_conversation.name }}{% else %}New conversation{% endif %}
                 </h1>
+                {% if streaming_enabled %}
+                    <span id="stream-status" class="stream-status" aria-live="polite">Ready</span>
+                {% endif %}
             </div>
         </div>
         <div class="chat-header-right">

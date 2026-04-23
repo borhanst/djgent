@@ -20,6 +20,7 @@ const conversationIdEl = document.getElementById("conversation-id");
 const chatTitleEl = document.getElementById("chat-title");
 const conversationListEl = document.getElementById("conversation-list");
 const composerNoteEl = document.getElementById("composer-note");
+const streamStatusEl = document.getElementById("stream-status");
 const sendButtonEl = formEl ? formEl.querySelector(".send-btn") : null;
 const themeToggleEls = document.querySelectorAll("[data-theme-toggle]");
 const themeIconEls = document.querySelectorAll("[data-theme-icon]");
@@ -166,6 +167,38 @@ function renderConversationList(conversations, activeId) {
         .join("");
 }
 
+function updateAssistantDraft(content) {
+    const lastMessage = currentMessages[currentMessages.length - 1];
+    if (lastMessage && lastMessage.role === "ai" && lastMessage.isStreaming) {
+        lastMessage.content = content;
+        renderMessages(currentMessages);
+        return;
+    }
+
+    currentMessages = [
+        ...currentMessages,
+        { role: "ai", content, isStreaming: true },
+    ];
+    renderMessages(currentMessages);
+}
+
+function finishAssistantDraft(content) {
+    const lastMessage = currentMessages[currentMessages.length - 1];
+    if (lastMessage && lastMessage.role === "ai" && lastMessage.isStreaming) {
+        lastMessage.content = content;
+        delete lastMessage.isStreaming;
+    } else {
+        currentMessages = [...currentMessages, { role: "ai", content }];
+    }
+    renderMessages(currentMessages);
+}
+
+function updateStreamStatus(label, active = false) {
+    if (!streamStatusEl) return;
+    streamStatusEl.textContent = label;
+    streamStatusEl.classList.toggle("is-active", active);
+}
+
 /* ── API ────────────────────────────────── */
 
 async function postJson(url, payload) {
@@ -182,6 +215,58 @@ async function postJson(url, payload) {
     return data;
 }
 
+function parseSseEvent(rawEvent) {
+    const event = { type: "message", data: "" };
+    rawEvent.split("\n").forEach((line) => {
+        if (line.startsWith("event:")) {
+            event.type = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+            event.data += line.slice(5).trim();
+        }
+    });
+    return event;
+}
+
+async function postStream(url, payload, onEvent) {
+    const response = await fetch(url, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+            "X-CSRFToken": getCsrfToken(),
+        },
+        body: JSON.stringify({ ...payload, stream: true }),
+    });
+
+    if (!response.body) {
+        throw new Error("Streaming is not supported by this browser.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
+
+        for (const rawEvent of events) {
+            if (!rawEvent.trim()) continue;
+            const parsed = parseSseEvent(rawEvent);
+            const data = parsed.data ? JSON.parse(parsed.data) : {};
+            onEvent(parsed.type, data);
+        }
+
+        if (done) break;
+    }
+
+    if (!response.ok) {
+        throw new Error("Request failed.");
+    }
+}
+
 /* ── Pending State ──────────────────────── */
 
 function setPendingState(pending) {
@@ -193,9 +278,10 @@ function setPendingState(pending) {
     if (inputEl) inputEl.disabled = pending;
     if (composerNoteEl) {
         composerNoteEl.textContent = pending
-            ? "Waiting for response..."
+            ? "Streaming response..."
             : "AI can make mistakes. Check important info.";
     }
+    updateStreamStatus(pending ? "Streaming" : "Ready", pending);
 }
 
 /* ── Send Button Active State ───────────── */
@@ -224,25 +310,56 @@ if (formEl) {
         setPendingState(true);
 
         try {
-            const data = await postJson(config.chatApiUrl, {
+            let finalData = null;
+            const payload = {
                 message,
                 conversation_id: conversationIdEl.value || null,
-            });
+            };
 
-            currentMessages = [
-                ...currentMessages,
-                { role: "ai", content: data.message.content },
-            ];
+            if (config.streamingEnabled) {
+                await postStream(config.chatApiUrl, payload, (eventType, data) => {
+                    if (eventType === "event") {
+                        updateStreamStatus(
+                            data.type ? data.type.replaceAll(".", " ") : "Streaming",
+                            true
+                        );
+                        return;
+                    }
+
+                    if (eventType === "message") {
+                        isPending = false;
+                        updateAssistantDraft(data.content || "");
+                        return;
+                    }
+
+                    if (eventType === "done") {
+                        finalData = data;
+                        finishAssistantDraft((data.message && data.message.content) || "");
+                        return;
+                    }
+
+                    if (eventType === "error") {
+                        throw new Error(data.error || "Streaming failed.");
+                    }
+                });
+            } else {
+                finalData = await postJson(config.chatApiUrl, payload);
+                currentMessages = [
+                    ...currentMessages,
+                    { role: "ai", content: finalData.message.content },
+                ];
+            }
+
             isPending = false;
             renderMessages(currentMessages);
 
-            if (data.conversation_id) {
-                conversationIdEl.value = data.conversation_id;
+            if (finalData && finalData.conversation_id) {
+                conversationIdEl.value = finalData.conversation_id;
                 if (config.historyUpdatesEnabled) {
                     window.history.replaceState(
                         {},
                         "",
-                        `${config.conversationPathPrefix}${data.conversation_id}/`
+                        `${config.conversationPathPrefix}${finalData.conversation_id}/`
                     );
                 }
             }
@@ -254,11 +371,17 @@ if (formEl) {
                 chatTitleEl.textContent = message.slice(0, 60);
             }
 
-            renderConversationList(
-                data.conversations || [],
-                data.conversation_id || null
-            );
+            if (finalData) {
+                renderConversationList(
+                    finalData.conversations || [],
+                    finalData.conversation_id || null
+                );
+            }
         } catch (error) {
+            const lastMessage = currentMessages[currentMessages.length - 1];
+            if (lastMessage && lastMessage.role === "ai" && lastMessage.isStreaming) {
+                delete lastMessage.isStreaming;
+            }
             currentMessages = [
                 ...currentMessages,
                 { role: "system", content: error.message },

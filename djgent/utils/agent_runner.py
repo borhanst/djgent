@@ -82,6 +82,23 @@ def run_agent_with_request(
     return result
 
 
+def stream_agent_with_request(
+    agent: Any,
+    request: HttpRequest,
+    input: str,
+    context: Optional[Dict[str, Any]] = None,
+    **kwargs: Any,
+):
+    """Stream an agent response with Django request context."""
+    django_ctx = DjangoContext.from_request(request)
+    agent_context = {"django": django_ctx}
+
+    if context:
+        agent_context.update(context)
+
+    yield from agent.stream(input, context=agent_context, **kwargs)
+
+
 def run_tool_with_request(
     tool: Any,
     request: HttpRequest,
