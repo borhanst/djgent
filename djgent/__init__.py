@@ -75,6 +75,7 @@ from djgent.runtime import (
 )
 from djgent.tools.base import ModelQueryTool, Tool
 from djgent.tools.decorators import register_tool, tool
+from djgent.tools.drf import DRFViewTool, drf_tool
 from djgent.tools.registry import ToolRegistry
 from djgent.tools.schemas import (
     AgentRunInput,
@@ -126,7 +127,9 @@ __all__ = [
     # Tools
     "Tool",
     "ModelQueryTool",
+    "DRFViewTool",
     "ToolRegistry",
+    "drf_tool",
     "register_tool",
     "tool",
     # Schemas

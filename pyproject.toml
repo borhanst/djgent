@@ -79,6 +79,9 @@ search = [
 http = [
     "httpx>=0.28.0",
 ]
+drf = [
+    "djangorestframework>=3.15",
+]
 mcp = [
     "langchain-mcp-adapters>=0.1.0",
 ]
@@ -91,6 +94,7 @@ all = [
     "langchain-community>=0.3.0",
     "duckduckgo-search>=8.0.0",
     "httpx>=0.28.0",
+    "djangorestframework>=3.15",
     "langchain-mcp-adapters>=0.1.0",
 ]
 dev = [

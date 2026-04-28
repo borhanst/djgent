@@ -2,6 +2,7 @@
 
 from djgent.tools.base import Tool
 from djgent.tools.decorators import register_tool, tool
+from djgent.tools.drf import DRFViewTool, drf_tool
 from djgent.tools.registry import ToolRegistry
 from djgent.tools.schemas import (
     AgentConfigInput,
@@ -26,6 +27,7 @@ __all__ = [
     "CalculatorInput",
     "DjangoAuthInput",
     "DjangoModelQueryInput",
+    "DRFViewTool",
     "HttpRequestInput",
     "KnowledgeIngestInput",
     "KnowledgeRetrievalInput",
@@ -35,6 +37,7 @@ __all__ = [
     "ToolExecutionContext",
     "ToolExecutionInput",
     "ToolRegistry",
+    "drf_tool",
     "register_tool",
     "validate_tool_input",
     "WeatherInput",
