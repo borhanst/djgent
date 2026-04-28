@@ -182,9 +182,24 @@ function updateAssistantDraft(content) {
     renderMessages(currentMessages);
 }
 
-function finishAssistantDraft(content) {
+function appendAssistantDelta(delta) {
     const lastMessage = currentMessages[currentMessages.length - 1];
     if (lastMessage && lastMessage.role === "ai" && lastMessage.isStreaming) {
+        lastMessage.content = `${lastMessage.content || ""}${delta}`;
+        renderMessages(currentMessages);
+        return;
+    }
+
+    currentMessages = [
+        ...currentMessages,
+        { role: "ai", content: delta, isStreaming: true },
+    ];
+    renderMessages(currentMessages);
+}
+
+function finishAssistantDraft(content) {
+    const lastMessage = currentMessages[currentMessages.length - 1];
+    if (lastMessage && lastMessage.role === "ai") {
         lastMessage.content = content;
         delete lastMessage.isStreaming;
     } else {
@@ -318,23 +333,28 @@ if (formEl) {
 
             if (config.streamingEnabled) {
                 await postStream(config.chatApiUrl, payload, (eventType, data) => {
-                    if (eventType === "event") {
+                    if (eventType === "run.start" || eventType === "tool.start" || eventType === "tool.end") {
                         updateStreamStatus(
-                            data.type ? data.type.replaceAll(".", " ") : "Streaming",
+                            eventType.replaceAll(".", " "),
                             true
                         );
                         return;
                     }
 
-                    if (eventType === "message") {
+                    if (eventType === "message.delta") {
                         isPending = false;
-                        updateAssistantDraft(data.content || "");
+                        appendAssistantDelta(data.delta || "");
                         return;
                     }
 
-                    if (eventType === "done") {
+                    if (eventType === "message.complete") {
+                        isPending = false;
+                        finishAssistantDraft(data.content || "");
+                        return;
+                    }
+
+                    if (eventType === "run.end") {
                         finalData = data;
-                        finishAssistantDraft((data.message && data.message.content) || "");
                         return;
                     }
 

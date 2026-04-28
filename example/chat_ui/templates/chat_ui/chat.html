@@ -82,6 +82,7 @@
         window.djgentChatConfig = {
             chatApiUrl: "{{ chat_api_url }}",
             newChatUrl: "{{ new_chat_url }}",
+            streamingEnabled: {{ streaming_enabled|yesno:"true,false" }},
             selectedConversationId: "{% if selected_conversation %}{{ selected_conversation.id }}{% endif %}"
         };
     </script>

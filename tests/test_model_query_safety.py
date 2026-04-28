@@ -3,9 +3,9 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 import pytest
+from demo_app.models import Author, Book
 from pydantic import BaseModel
 
-from demo_app.models import Author, Book
 from djgent.tools.base import ModelQueryTool
 from djgent.tools.builtin import DjangoModelQueryTool
 from djgent.tools.schemas import DjangoModelQueryInput, validate_tool_input

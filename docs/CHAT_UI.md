@@ -139,9 +139,11 @@ const response = await fetch("/ai/api/chat/", {
 
 The stream emits:
 
-- `event` for agent runtime events
-- `message` for the final assistant message
-- `done` with the same conversation metadata as the JSON response
+- `run.start` when the agent run begins
+- `message.delta` for incremental assistant text
+- `message.complete` for the final assistant message
+- `tool.start` and `tool.end` for tool runtime events
+- `run.end` with conversation id and sidebar conversation metadata
 - `error` for validation, provider, or execution failures
 
 Streaming is enabled by default for `ConfiguredChatView`. Disable it with:

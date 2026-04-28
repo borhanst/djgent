@@ -5,7 +5,7 @@ from typing import Any, Optional
 from django.conf import settings
 from django.db import models
 from django.http import Http404, JsonResponse, StreamingHttpResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_GET, require_POST
@@ -259,6 +259,19 @@ class BaseChatView(ABC):
             .filter(id=conversation_id)
             .first()
         )
+        if (
+            not conversation
+            and not self.get_active_user(request)
+            and not self.get_session_conversation_ids(request)
+        ):
+            conversation = Conversation.objects.filter(
+                id=conversation_id,
+                agent_name=self.get_agent_name(),
+                user__isnull=True,
+            ).first()
+            if conversation:
+                self.track_conversation(request, str(conversation.id))
+
         if not conversation:
             raise Http404("Conversation not found.")
         return conversation
@@ -321,8 +334,9 @@ class BaseChatView(ABC):
     ) -> dict[str, Any]:
         selected_conversation = None
         if conversation_id:
-            selected_conversation = get_object_or_404(
-                Conversation, id=conversation_id
+            selected_conversation = self.get_conversation_or_404(
+                request,
+                conversation_id,
             )
 
         conversations = [
@@ -382,14 +396,23 @@ class BaseChatView(ABC):
         )
 
     def reset_conversation(self, request) -> JsonResponse:
-        """Clear the session's conversation tracking and redirect to home."""
-        conversation_ids = self.get_session_conversation_ids(request)
-        if conversation_ids:
-            conversation_ids.clear()
-            self.save_session_conversation_ids(request, conversation_ids)
+        """Create a blank conversation and redirect to its detail page."""
+        conversation = Conversation.objects.create(
+            agent_name=self.get_agent_name(),
+            name="",
+            user=self.get_active_user(request),
+        )
+        self.track_conversation(request, str(conversation.id))
 
         return JsonResponse(
-            {"ok": True, "redirect_url": self.get_home_url(request)}
+            {
+                "ok": True,
+                "conversation_id": str(conversation.id),
+                "conversation": self.serialize_conversation(conversation),
+                "redirect_url": (
+                    f"{self.get_conversation_path_prefix(request)}{conversation.id}/"
+                ),
+            }
         )
 
     def wants_stream(self, request, payload: dict[str, Any]) -> bool:
@@ -452,27 +475,34 @@ class BaseChatView(ABC):
         message = (payload.get("message") or "").strip()
         conversation_id = payload.get("conversation_id") or None
 
+        if conversation_id:
+            self.get_conversation_or_404(request, conversation_id)
+        else:
+            conversation = Conversation.objects.create(
+                agent_name=self.get_agent_name(),
+                name="",
+                user=self.get_active_user(request),
+            )
+            conversation_id = str(conversation.id)
+            self.track_conversation(request, conversation_id)
+
         def event_stream():
             try:
-                if conversation_id:
-                    get_object_or_404(Conversation, id=conversation_id)
-
                 agent = self.build_agent(
                     request, conversation_id=conversation_id
                 )
                 final_output = ""
                 for item in stream_agent_with_request(agent, request, message):
-                    if isinstance(item, dict):
-                        yield self.sse_event("event", item)
-                    else:
-                        final_output = str(item)
-                        yield self.sse_event(
-                            "message",
-                            {
-                                "role": "ai",
-                                "content": final_output,
-                            },
-                        )
+                    if not isinstance(item, dict):
+                        continue
+
+                    event_name = item.get("event", "event")
+                    event_data = item.get("data", {})
+                    if event_name == "message.delta":
+                        final_output += str(event_data.get("delta", ""))
+                    elif event_name == "message.complete":
+                        final_output = str(event_data.get("content", final_output))
+                    yield self.sse_event(event_name, event_data)
 
                 new_conversation_id, conversations = (
                     self.get_response_conversation_data(
@@ -482,14 +512,10 @@ class BaseChatView(ABC):
                     )
                 )
                 yield self.sse_event(
-                    "done",
+                    "run.end",
                     {
                         "ok": True,
                         "conversation_id": new_conversation_id,
-                        "message": {
-                            "role": "ai",
-                            "content": final_output,
-                        },
                         "conversations": conversations,
                     },
                 )
@@ -594,6 +620,8 @@ class BaseChatView(ABC):
 
 class ConfiguredChatView(BaseChatView):
     """Built-in chat view that reads settings from DJGENT.CHAT_UI."""
+
+    conversation_path_segment = ""
 
     def get_settings(self) -> dict[str, Any]:
         djgent_settings = getattr(settings, "DJGENT", {}) or {}

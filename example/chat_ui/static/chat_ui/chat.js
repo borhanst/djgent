@@ -108,6 +108,32 @@ function renderConversationList(conversations, activeId) {
         .join("");
 }
 
+function appendAssistantDelta(delta) {
+    const lastMessage = currentMessages[currentMessages.length - 1];
+    if (lastMessage && lastMessage.role === "ai" && lastMessage.isStreaming) {
+        lastMessage.content = `${lastMessage.content || ""}${delta}`;
+        renderMessages(currentMessages);
+        return;
+    }
+
+    currentMessages = [
+        ...currentMessages,
+        { role: "ai", content: delta, isStreaming: true },
+    ];
+    renderMessages(currentMessages);
+}
+
+function finishAssistantDraft(content) {
+    const lastMessage = currentMessages[currentMessages.length - 1];
+    if (lastMessage && lastMessage.role === "ai") {
+        lastMessage.content = content;
+        delete lastMessage.isStreaming;
+    } else {
+        currentMessages = [...currentMessages, { role: "ai", content }];
+    }
+    renderMessages(currentMessages);
+}
+
 async function postJson(url, payload) {
     const response = await fetch(url, {
         method: "POST",
@@ -121,6 +147,58 @@ async function postJson(url, payload) {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Request failed.");
     return data;
+}
+
+function parseSseEvent(rawEvent) {
+    const event = { type: "message", data: "" };
+    rawEvent.split("\n").forEach((line) => {
+        if (line.startsWith("event:")) {
+            event.type = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+            event.data += line.slice(5).trim();
+        }
+    });
+    return event;
+}
+
+async function postStream(url, payload, onEvent) {
+    const response = await fetch(url, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+            "X-CSRFToken": getCsrfToken(),
+        },
+        body: JSON.stringify({ ...payload, stream: true }),
+    });
+
+    if (!response.body) {
+        throw new Error("Streaming is not supported by this browser.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
+
+        for (const rawEvent of events) {
+            if (!rawEvent.trim()) continue;
+            const parsed = parseSseEvent(rawEvent);
+            const data = parsed.data ? JSON.parse(parsed.data) : {};
+            onEvent(parsed.type, data);
+        }
+
+        if (done) break;
+    }
+
+    if (!response.ok) {
+        throw new Error("Request failed.");
+    }
 }
 
 function setPendingState(pending) {
@@ -158,31 +236,68 @@ if (formEl) {
         setPendingState(true);
 
         try {
-            const data = await postJson(config.chatApiUrl, {
+            let finalData = null;
+            const payload = {
                 message,
                 conversation_id: conversationIdEl.value || null,
-            });
+            };
 
-            currentMessages = [
-                ...currentMessages,
-                { role: "ai", content: data.message.content },
-            ];
+            if (config.streamingEnabled) {
+                await postStream(config.chatApiUrl, payload, (eventType, data) => {
+                    if (eventType === "message.delta") {
+                        isPending = false;
+                        appendAssistantDelta(data.delta || "");
+                        return;
+                    }
+
+                    if (eventType === "message.complete") {
+                        isPending = false;
+                        finishAssistantDraft(data.content || "");
+                        return;
+                    }
+
+                    if (eventType === "run.end") {
+                        finalData = data;
+                        return;
+                    }
+
+                    if (eventType === "error") {
+                        throw new Error(data.error || "Streaming failed.");
+                    }
+                });
+            } else {
+                finalData = await postJson(config.chatApiUrl, payload);
+                currentMessages = [
+                    ...currentMessages,
+                    { role: "ai", content: finalData.message.content },
+                ];
+            }
+
             isPending = false;
             renderMessages(currentMessages);
 
-            if (data.conversation_id) {
-                conversationIdEl.value = data.conversation_id;
+            if (finalData && finalData.conversation_id) {
+                conversationIdEl.value = finalData.conversation_id;
             }
 
             if (!chatTitleEl.textContent || chatTitleEl.textContent === "New conversation") {
                 chatTitleEl.textContent = message.slice(0, 60);
             }
 
-            renderConversationList(data.conversations || [], data.conversation_id || null);
-            if (data.conversation_id) {
-                window.history.replaceState({}, "", `/chat/${data.conversation_id}/`);
+            if (finalData) {
+                renderConversationList(
+                    finalData.conversations || [],
+                    finalData.conversation_id || null
+                );
+            }
+            if (finalData && finalData.conversation_id) {
+                window.history.replaceState({}, "", `/chat/${finalData.conversation_id}/`);
             }
         } catch (error) {
+            const lastMessage = currentMessages[currentMessages.length - 1];
+            if (lastMessage && lastMessage.role === "ai" && lastMessage.isStreaming) {
+                delete lastMessage.isStreaming;
+            }
             currentMessages = [...currentMessages, { role: "system", content: error.message }];
             renderMessages(currentMessages);
         } finally {

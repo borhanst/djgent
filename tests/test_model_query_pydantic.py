@@ -1,9 +1,9 @@
 import json
 
 import pytest
+from demo_app.models import Author, Book
 from pydantic import BaseModel
 
-from demo_app.models import Author, Book
 from djgent.tools.base import ModelQueryTool
 
 

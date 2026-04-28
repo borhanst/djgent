@@ -21,6 +21,7 @@ from typing import (
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     BaseMessage,
     HumanMessage,
     SystemMessage,
@@ -337,6 +338,49 @@ class Agent:
             return value
         except TypeError:
             return repr(value)
+
+    def _stream_event_dict(self, event: str, **data: Any) -> Dict[str, Any]:
+        """Build the public JSON-friendly streaming event payload."""
+        return {
+            "event": event,
+            "data": self._safe_event_value(data),
+        }
+
+    def _runtime_event_dict(self, event: Any) -> Dict[str, Any]:
+        """Convert an ExecutionContext event to the public stream contract."""
+        payload = self._stream_event_dict(event.event, **event.data)
+        payload["timestamp"] = event.timestamp.isoformat()
+        return payload
+
+    def _chunk_text(self, chunk: Any) -> str:
+        """Extract text content from a LangChain message chunk."""
+        content = getattr(chunk, "content", chunk)
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: List[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict):
+                    text = item.get("text") or item.get("content")
+                    if isinstance(text, str):
+                        parts.append(text)
+            return "".join(parts)
+        return ""
+
+    def _normalize_stream_update(self, update: Any) -> tuple[str, Optional[Any], List[Any]]:
+        """Normalize a LangGraph stream update into final output data."""
+        if not isinstance(update, dict):
+            return "", None, []
+
+        for value in reversed(list(update.values())):
+            if isinstance(value, dict) and value.get("messages"):
+                output, structured_response, output_messages = self._normalize_agent_output(value)
+                if output:
+                    return output, structured_response, output_messages
+
+        return self._normalize_agent_output(update)
 
     def _invoke_model(
         self,
@@ -782,11 +826,164 @@ class Agent:
         context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ):
-        """Yield execution events for a run."""
-        result = self._execute(input, context=context, **kwargs)
-        for event in result.events:
-            yield event
-        yield result.output
+        """Yield structured streaming events for a run."""
+        self._initialize_memory_for_run()
+        execution = self._build_execution_context(input, context=context)
+        active_schema = kwargs.pop("response_schema", None) or self.response_schema
+        original_schema = self.response_schema
+        if active_schema is not self.response_schema:
+            self.response_schema = active_schema
+
+        event_cursor = 0
+        messages: List[BaseMessage] = []
+
+        def drain_runtime_events():
+            nonlocal event_cursor
+            for item in execution.events[event_cursor:]:
+                yield self._runtime_event_dict(item)
+            event_cursor = len(execution.events)
+
+        try:
+            apply_before_run(self._middleware, execution)
+            messages = self._build_messages(input, execution)
+            execution.emit("run.start", input=input, thread_id=execution.thread_id)
+            yield from drain_runtime_events()
+
+            output_parts: List[str] = []
+            output_messages: List[Any] = []
+            structured_response = None
+            final_update: Any = None
+            model_kwargs = dict(kwargs)
+            lc_tools = self._prepare_langchain_tools(execution)
+            langchain_middleware, checkpointer = self._build_langchain_runtime()
+
+            if lc_tools or langchain_middleware or checkpointer is not None:
+                from langchain.agents import create_agent
+
+                create_kwargs: Dict[str, Any] = {
+                    "model": self.llm,
+                    "tools": lc_tools,
+                }
+                if langchain_middleware:
+                    create_kwargs["middleware"] = langchain_middleware
+                if checkpointer is not None:
+                    create_kwargs["checkpointer"] = checkpointer
+                if active_schema is not None:
+                    create_kwargs["response_format"] = active_schema
+
+                try:
+                    agent = create_agent(**create_kwargs)
+                except TypeError:
+                    if langchain_middleware or checkpointer is not None:
+                        raise AgentError(
+                            "Configured LangChain built-in middleware requires a "
+                            "LangChain version with create_agent(..., middleware=..., "
+                            "checkpointer=...)."
+                        )
+                    agent = create_agent(self.llm, lc_tools)
+
+                config = {"configurable": {"thread_id": execution.thread_id}}
+                try:
+                    stream = agent.stream(
+                        {"messages": messages},
+                        config=config,
+                        context=execution.context,
+                        stream_mode=["messages", "updates"],
+                        **model_kwargs,
+                    )
+                except TypeError:
+                    stream = agent.stream(
+                        {"messages": messages},
+                        stream_mode=["messages", "updates"],
+                        **model_kwargs,
+                    )
+
+                for mode, payload in stream:
+                    if mode == "messages":
+                        chunk, metadata = payload
+                        if not isinstance(chunk, (AIMessage, AIMessageChunk)):
+                            yield from drain_runtime_events()
+                            continue
+                        delta = self._chunk_text(chunk)
+                        if delta:
+                            output_parts.append(delta)
+                            yield self._stream_event_dict(
+                                "message.delta",
+                                delta=delta,
+                                node=metadata.get("langgraph_node"),
+                            )
+                    elif mode == "updates":
+                        final_update = payload
+                    yield from drain_runtime_events()
+
+                if final_update is not None:
+                    final_output, structured_response, output_messages = (
+                        self._normalize_stream_update(final_update)
+                    )
+                else:
+                    final_output = ""
+            else:
+                if not self.llm:
+                    raise ValueError("LLM not configured. Provide an LLM when creating the agent.")
+
+                for chunk in self.llm.stream(messages, **model_kwargs):
+                    delta = self._chunk_text(chunk)
+                    if delta:
+                        output_parts.append(delta)
+                        yield self._stream_event_dict("message.delta", delta=delta)
+
+                final_output = "".join(output_parts)
+                output_messages = [AIMessage(content=final_output)]
+
+            output = "".join(output_parts) or final_output
+            output = apply_after_run(self._middleware, execution, output)
+            structured_response = structured_response or self._coerce_structured_output(
+                output, active_schema
+            )
+            self._update_history(input, output, thread_id=execution.thread_id)
+            self._persist_execution_state(execution, output=output)
+            yield self._stream_event_dict("message.complete", role="ai", content=output)
+            execution.emit("run.end", output=output)
+            yield from drain_runtime_events()
+
+            result = AgentResult(
+                output=output,
+                messages=output_messages or messages + [AIMessage(content=output)],
+                structured_response=structured_response,
+                state=execution.state,
+                events=execution.events,
+            )
+            self._last_result = result
+        except ApprovalRequiredError as exc:
+            self._persist_execution_state(execution, output=exc.request.reason, approval_error=exc)
+            self._persist_failed_run(
+                input,
+                exc.request.reason or str(exc),
+                role="system",
+                thread_id=execution.thread_id,
+            )
+            execution.emit(
+                "run.interrupted",
+                tool=exc.request.tool_name,
+                reason=exc.request.reason,
+            )
+            self._log_audit_tool_approval(execution, exc)
+            yield from drain_runtime_events()
+        except Exception as exc:
+            from djgent.exceptions import RateLimitError
+
+            if isinstance(exc, RateLimitError):
+                self._log_audit_rate_limit(execution, exc)
+            self._log_audit_failed_run(execution, exc)
+            self._persist_failed_run(
+                input,
+                str(exc),
+                role="system",
+                thread_id=execution.thread_id,
+            )
+            yield self._stream_event_dict("error", ok=False, error=str(exc))
+        finally:
+            self.response_schema = original_schema
 
     async def astream(
         self,
@@ -794,11 +991,12 @@ class Agent:
         context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ):
-        """Async generator yielding execution events."""
-        result = await asyncio.to_thread(self._execute, input, context, **kwargs)
-        for event in result.events:
+        """Async generator yielding structured streaming events."""
+        events = await asyncio.to_thread(
+            lambda: list(self.stream(input, context=context, **kwargs))
+        )
+        for event in events:
             yield event
-        yield result.output
 
     def approve_pending_tool(
         self, tool_name: Optional[str] = None, thread_id: Optional[str] = None

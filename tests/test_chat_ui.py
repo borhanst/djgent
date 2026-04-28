@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -87,8 +89,26 @@ class TestBuiltInChatUi:
 
             with patch("djgent.chat.views.stream_agent_with_request") as streamer:
                 streamer.return_value = [
-                    {"type": "run.start", "thread_id": str(conversation.id)},
-                    "Hello from stream",
+                    {
+                        "event": "run.start",
+                        "data": {"thread_id": str(conversation.id)},
+                    },
+                    {
+                        "event": "message.delta",
+                        "data": {"delta": "Hello "},
+                    },
+                    {
+                        "event": "message.delta",
+                        "data": {"delta": "from stream"},
+                    },
+                    {
+                        "event": "message.complete",
+                        "data": {"content": "Hello from stream"},
+                    },
+                    {
+                        "event": "run.end",
+                        "data": {"output": "Hello from stream"},
+                    },
                 ]
 
                 response = client.post(
@@ -100,17 +120,56 @@ class TestBuiltInChatUi:
 
         assert response.status_code == 200
         assert response["Content-Type"] == "text/event-stream"
-        assert "event: event" in body
-        assert '"type": "run.start"' in body
-        assert "event: message" in body
+        assert "event: run.start" in body
+        assert "event: message.delta" in body
+        assert '"delta": "Hello "' in body
+        assert '"delta": "from stream"' in body
+        assert "event: message.complete" in body
         assert '"content": "Hello from stream"' in body
-        assert "event: done" in body
+        assert "event: run.end" in body
+        assert '"conversation_id"' in body
+        assert body.count('"role": "ai"') == 0
 
         conversation = Conversation.objects.get(
             id=conversation.id,
             agent_name="djgent-chat",
         )
         assert conversation.name == "Hello"
+
+    def test_streaming_new_conversation_detail_is_accessible(self, settings) -> None:
+        self._configure(settings)
+        client = Client()
+
+        with patch("djgent.chat.views.ConfiguredChatView.build_agent") as build_agent:
+            def build_agent_for_conversation(request, conversation_id=None):
+                agent = build_agent.return_value
+                agent.get_conversation_id.return_value = conversation_id
+                return agent
+
+            build_agent.side_effect = build_agent_for_conversation
+
+            with patch("djgent.chat.views.stream_agent_with_request") as streamer:
+                streamer.return_value = [
+                    {
+                        "event": "message.complete",
+                        "data": {"content": "Hello from stream"},
+                    },
+                ]
+
+                response = client.post(
+                    "/chat/api/chat/",
+                    data='{"message":"Hello","stream":true}',
+                    content_type="application/json",
+                )
+                body = b"".join(response.streaming_content).decode("utf-8")
+
+        assert response.status_code == 200
+        conversation = Conversation.objects.get(agent_name="djgent-chat")
+        assert f'"conversation_id": "{conversation.id}"' in body
+
+        detail_response = client.get(f"/chat/{conversation.id}/")
+
+        assert detail_response.status_code == 200
 
     def test_stream_message_validation_errors_use_sse(self, settings) -> None:
         self._configure(settings)
@@ -221,6 +280,22 @@ class TestBuiltInChatUi:
 
         assert own_response.status_code == 200
         assert other_response.status_code == 404
+
+    def test_anonymous_user_can_adopt_existing_conversation_without_session(
+        self, settings
+    ) -> None:
+        self._configure(settings)
+        client = Client()
+        conversation = Conversation.objects.create(
+            agent_name="djgent-chat",
+            user=None,
+            name="Recovered conversation",
+        )
+
+        response = client.get(f"/chat/{conversation.id}/")
+
+        assert response.status_code == 200
+        assert str(conversation.id) in client.session["djgent_chat_conversation_ids"]
 
     def test_authenticated_user_only_sees_own_conversations(self, settings) -> None:
         self._configure(settings)
@@ -343,6 +418,43 @@ class TestCustomChatView:
         )
         assert conversation.name == "Hello"
 
+    def test_post_message_can_stream_for_subclass_view(self, settings) -> None:
+        self._configure(settings)
+        client = Client()
+        conversation = Conversation.objects.create(
+            agent_name="custom-chat",
+            name="",
+        )
+
+        with patch("tests.custom_chat_views.TestCustomChatView.build_agent") as build_agent:
+            build_agent.return_value.get_conversation_id.return_value = str(conversation.id)
+
+            with patch("djgent.chat.views.stream_agent_with_request") as streamer:
+                streamer.return_value = [
+                    {"event": "message.delta", "data": {"delta": "Custom "}},
+                    {"event": "message.delta", "data": {"delta": "stream"}},
+                    {
+                        "event": "message.complete",
+                        "data": {"content": "Custom stream"},
+                    },
+                ]
+
+                response = client.post(
+                    "/api/chat/",
+                    data='{"message":"Hello","stream":true}',
+                    content_type="application/json",
+                )
+                body = b"".join(response.streaming_content).decode("utf-8")
+
+        assert response.status_code == 200
+        assert response["Content-Type"] == "text/event-stream"
+        assert "event: message.delta" in body
+        assert '"delta": "Custom "' in body
+        assert '"delta": "stream"' in body
+        assert "event: run.end" in body
+        assert '"content": "Custom stream"' in body
+        assert body.count('"role": "ai"') == 0
+
     def test_embed_view_works_for_subclass(self, settings) -> None:
         self._configure(settings)
         client = Client()
@@ -396,3 +508,39 @@ class TestCustomChatView:
 
         assert own_response.status_code == 200
         assert other_response.status_code == 404
+
+
+class TestExampleChatUiAssets:
+    def test_example_template_exposes_streaming_config(self) -> None:
+        template = Path("example/chat_ui/templates/chat_ui/chat.html").read_text()
+
+        assert "streamingEnabled" in template
+        assert "streaming_enabled|yesno" in template
+
+    def test_example_javascript_consumes_streaming_events(self) -> None:
+        script = Path("example/chat_ui/static/chat_ui/chat.js").read_text()
+
+        assert "function postStream" in script
+        assert '"Accept": "text/event-stream"' in script
+        assert 'eventType === "message.delta"' in script
+        assert 'eventType === "run.end"' in script
+
+    @pytest.mark.parametrize(
+        "script_path",
+        [
+            "djgent/chat/static/djgent/chat.js",
+            "example/chat_ui/static/chat_ui/chat.js",
+        ],
+    )
+    def test_stream_finalization_updates_existing_ai_message(self, script_path: str) -> None:
+        script = Path(script_path).read_text()
+        match = re.search(
+            r"function finishAssistantDraft\(content\) \{(?P<body>.*?)\n\}",
+            script,
+            re.DOTALL,
+        )
+        assert match is not None
+        body = match.group("body")
+
+        assert 'lastMessage && lastMessage.role === "ai"' in body
+        assert 'lastMessage.role === "ai" && lastMessage.isStreaming' not in body
