@@ -27,7 +27,7 @@ Example:
 For more information, see: https://github.com/borhanst/djgent
 """
 
-__version__ = "0.3.2"
+__version__ = "0.4.0"
 __author__ = "Borhan"
 __author_email__ = "mdborhan.st@gmail.com"
 __license__ = "MIT"

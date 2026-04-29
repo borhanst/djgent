@@ -2,7 +2,6 @@ from djgent import register_public_model
 
 from .models import Author, Book
 
-
 register_public_model(
     Author,
     fields=["id", "name", "country"],

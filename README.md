@@ -1102,10 +1102,10 @@ uv build
 
 ```bash
 # Publish to TestPyPI first
-uv publish --publish-url https://test.pypi.org/legacy/ --token pypi-YOUR-TESTPYPI-TOKEN dist/djgent-0.3.2.tar.gz dist/djgent-0.3.2-py3-none-any.whl
+uv publish --publish-url https://test.pypi.org/legacy/ --token pypi-YOUR-TESTPYPI-TOKEN dist/djgent-0.4.0.tar.gz dist/djgent-0.4.0-py3-none-any.whl
 
 # Publish to PyPI after TestPyPI install verification
-uv publish --token pypi-YOUR-PYPI-TOKEN dist/djgent-0.3.2.tar.gz dist/djgent-0.3.2-py3-none-any.whl
+uv publish --token pypi-YOUR-PYPI-TOKEN dist/djgent-0.4.0.tar.gz dist/djgent-0.4.0-py3-none-any.whl
 ```
 
 ## License
@@ -1123,6 +1123,13 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 5. Open a Pull Request
 
 ## Changelog
+
+### 0.4.0 (2026-04-29)
+- Added settings-backed memory defaults for `Agent.create()`
+- Added DRF view-backed tools with documentation and demo support
+- Fixed built-in chat detail URL generation for `/chat/` mounts
+- Updated package dependencies for OpenAI LangChain and Django REST Framework
+- Added docs and tests for memory defaults, DRF tools, and chat URL behavior
 
 ### 0.3.2 (2026-04-22)
 - Fixed configured chat input placeholders in the built-in chat UI

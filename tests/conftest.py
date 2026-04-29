@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Any, Generator
-from unittest.mock import MagicMock, patch
+from typing import Any
+from unittest.mock import MagicMock
 
 import django
 import pytest
@@ -96,7 +96,7 @@ def mock_tool() -> MagicMock:
 @pytest.fixture
 def sample_messages() -> list:
     """Create sample messages for testing."""
-    from langchain_core.messages import HumanMessage, AIMessage
+    from langchain_core.messages import AIMessage, HumanMessage
     return [
         HumanMessage(content="Hello"),
         AIMessage(content="Hi there!"),
@@ -129,19 +129,19 @@ def mock_django_context() -> dict:
     """Create a mock Django context for tool runtime."""
     from dataclasses import dataclass
     from typing import Optional
-    
+
     @dataclass
     class MockUser:
         id: int = 1
         username: str = "testuser"
         is_authenticated: bool = True
-        
-    @dataclass  
+
+    @dataclass
     class MockDjangoContext:
         user: MockUser
         is_authenticated: bool = True
         request: Optional[Any] = None
-        
+
     return {
         "django": MockDjangoContext(user=MockUser())
     }

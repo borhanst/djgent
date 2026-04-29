@@ -542,8 +542,12 @@ def chat_home(request, conversation_id: Optional[str] = None):
 
 
 @xframe_options_sameorigin
-def chat_embed(request, conversation_id: Optional[str]=None):
-    return ConfiguredChatView().render_page(request, conversation_id=conversation_id)
+@require_GET
+def chat_embed(request, conversation_id: Optional[str] = None):
+    return ConfiguredChatView().render_embed(
+        request, conversation_id=conversation_id
+    )
+
 
 @require_POST
 def new_conversation(request):
