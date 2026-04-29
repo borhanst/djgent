@@ -20,10 +20,10 @@ Djgent supports persistent conversation memory using Django models. This allows 
 ```python
 from djgent import Agent
 
-# Default: in-memory storage (temporary)
+# Default: uses DJGENT["MEMORY_ENABLED"] and DJGENT["MEMORY_BACKEND"].
+# With default settings, this is temporary in-memory storage.
 agent = Agent.create(
     name="assistant",
-    memory=True,
 )
 
 response = agent.run("Hello!")
@@ -87,13 +87,33 @@ Add to your `settings.py`:
 ```python
 DJGENT = {
     # ... other settings
-    "MEMORY_BACKEND": "database",  # Default backend
-    "MEMORY_SETTINGS": {
-        "auto_create": True,       # Auto-create conversation
-        "max_messages": 100,       # Max messages to keep
-        "cleanup_days": 90,        # Auto-delete old conversations
-    },
+    "MEMORY_ENABLED": True,
+    "MEMORY_BACKEND": "database",  # Default Agent.create() backend
 }
+```
+
+`Agent.create()` uses these settings only when `memory` or `memory_backend`
+are omitted. Per-agent arguments always override the global defaults:
+
+```python
+# Force temporary in-memory storage for one agent.
+temporary_agent = Agent.create(
+    name="scratch-assistant",
+    memory_backend="memory",
+)
+
+# Force persistent database storage for one agent.
+persistent_agent = Agent.create(
+    name="persistent-assistant",
+    memory=True,
+    memory_backend="database",
+)
+
+# Disable conversation memory for one agent.
+stateless_agent = Agent.create(
+    name="stateless-assistant",
+    memory=False,
+)
 ```
 
 ## API Reference

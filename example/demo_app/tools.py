@@ -25,7 +25,6 @@ class BookQueryTool(ModelQueryTool):
     schema = BookSchema
 
 
-
 @tool
 def calculator(query: str) -> str:
     """

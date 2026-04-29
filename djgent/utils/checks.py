@@ -50,7 +50,9 @@ def check_djgent_settings(app_configs, **kwargs) -> List[Error]:
         )
 
     # Check if at least one API key is set
-    active_keys = {k: v for k, v in api_keys.items() if v and v != "your-***-here"}
+    active_keys = {
+        k: v for k, v in api_keys.items() if v and v != "your-***-here"
+    }
     if not active_keys:
         errors.append(
             Warning(
@@ -178,7 +180,9 @@ def check_djent_tools(app_configs, **kwargs) -> List[Warning]:
         from djgent.tools.registry import ToolRegistry
 
         djgent_settings = getattr(settings, "DJGENT", {})
-        expected_tools = djgent_settings.get("BUILTIN_TOOLS", ["calculator", "datetime"])
+        expected_tools = djgent_settings.get(
+            "BUILTIN_TOOLS", ["calculator", "datetime"]
+        )
         registered_tools = ToolRegistry.list_tools()
 
         for tool_name in expected_tools:
@@ -223,7 +227,9 @@ def check_djent_builtin_tools_config(app_configs, **kwargs) -> List[Warning]:
     ]
 
     djgent_settings = getattr(settings, "DJGENT", {})
-    builtin_tools = djgent_settings.get("BUILTIN_TOOLS", ["calculator", "datetime"])
+    builtin_tools = djgent_settings.get(
+        "BUILTIN_TOOLS", ["calculator", "datetime"]
+    )
 
     # Check for unknown tool names
     for tool_name in builtin_tools:
@@ -349,7 +355,9 @@ def check_djent_auth_tool_config(app_configs, **kwargs) -> List[Warning]:
 
 
 @register()
-def check_djent_auth_requirements_config(app_configs, **kwargs) -> List[Warning]:
+def check_djent_auth_requirements_config(
+    app_configs, **kwargs
+) -> List[Warning]:
     """
     Check AUTH_REQUIREMENTS configuration.
 
@@ -486,7 +494,9 @@ def run_djent_checks() -> Dict[str, Any]:
         "BUILTIN_TOOLS": djgent_settings.get("BUILTIN_TOOLS", []),
         "AUTO_DISCOVER_TOOLS": djgent_settings.get("AUTO_DISCOVER_TOOLS", True),
         "MODEL_QUERY_TOOL_ENABLED": model_query_config.get("ENABLED", True),
-        "MODEL_QUERY_TOOL_EXCLUDED_MODELS": model_query_config.get("EXCLUDED_MODELS", []),
+        "MODEL_QUERY_TOOL_EXCLUDED_MODELS": model_query_config.get(
+            "EXCLUDED_MODELS", []
+        ),
         "DJANGO_AUTH_TOOL_AVAILABLE": True,  # Always available
         "AUTH_REQUIREMENTS_CONFIGURED": bool(auth_requirements),
         "PUBLIC_MODELS": (
@@ -509,14 +519,18 @@ def run_djent_checks() -> Dict[str, Any]:
 
     # Check API keys
     api_keys = djgent_settings.get("API_KEYS", {})
-    active_keys = {k: v for k, v in api_keys.items() if v and not v.startswith("your-")}
+    active_keys = {
+        k: v for k, v in api_keys.items() if v and not v.startswith("your-")
+    }
 
     if not active_keys:
         results["warnings"].append("No API keys are configured")
 
     # Check BUILTIN_TOOLS configuration
     available_tools = ["calculator", "datetime", "http", "search", "weather"]
-    builtin_tools = djgent_settings.get("BUILTIN_TOOLS", ["calculator", "datetime"])
+    builtin_tools = djgent_settings.get(
+        "BUILTIN_TOOLS", ["calculator", "datetime"]
+    )
 
     for tool_name in builtin_tools:
         if tool_name not in available_tools:
@@ -530,7 +544,9 @@ def run_djent_checks() -> Dict[str, Any]:
         try:
             __import__(package)
         except ImportError:
-            results["errors"].append(f"Required package '{package}' is not installed")
+            results["errors"].append(
+                f"Required package '{package}' is not installed"
+            )
             results["success"] = False
 
     # Check optional packages

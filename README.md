@@ -128,6 +128,7 @@ DJGENT = {
     "BUILTIN_TOOLS": ["calculator", "datetime", "search"],
     "AUTO_DISCOVER_TOOLS": True,
     "MEMORY_ENABLED": True,
+    "MEMORY_BACKEND": "memory",  # Use "database" for persistent conversations
 }
 ```
 
@@ -404,6 +405,8 @@ Save conversation history to the database:
 
 ```python
 from djgent import Agent
+
+# Or set DJGENT["MEMORY_BACKEND"] = "database" globally.
 
 # Database-backed persistent storage
 agent = Agent.create(
@@ -733,12 +736,12 @@ from djgent import Agent
 agent = Agent.create(
     name: str,                    # Agent name
     tools: List[str] = None,      # List of tool names
-    memory: bool = True,          # Enable conversation memory
+    memory: bool = None,          # Defaults to DJGENT["MEMORY_ENABLED"]
     system_prompt: str = None,    # System prompt
     auto_load_tools: bool = False,# Auto-load all registered tools
     llm_provider: str = None,     # Override default LLM provider
     middleware: List = None,      # Middleware list (rate limiting, caching, etc.)
-    memory_backend: str = None,   # "database" or "memory"
+    memory_backend: str = None,   # Defaults to DJGENT["MEMORY_BACKEND"]
     response_schema: type = None, # Optional structured output schema
     mcp_servers: dict = None,     # Optional MCP server definitions
     langchain_middleware: dict = None,  # LangChain built-in middleware config
@@ -791,6 +794,59 @@ and `Tool` subclasses during import. Without the decorator, Djgent can still
 auto-register `Tool` subclasses from `name = "my_tool"` when
 `AUTO_DISCOVER_TOOLS` is enabled. Manual `ToolRegistry.register(...)` also still
 works and wins over duplicate auto-discovery.
+
+### DRF View Tools
+
+Install the optional DRF extra when you want to expose Django REST Framework
+views as agent tools:
+
+```bash
+uv sync --extra drf --extra dev
+```
+
+Use `@drf_tool` in an installed app module, usually `tools.py`, to register one
+explicit APIView endpoint or ViewSet action as a normal Djgent tool:
+
+```python
+from djgent import drf_tool
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+@drf_tool(
+    name="book_search_api",
+    description="Search books through the DRF API.",
+    method="GET",
+    path="/api/books/search/",
+)
+class BookSearchView(APIView):
+    def get(self, request):
+        return Response({"query": request.query_params.get("q", "")})
+```
+
+For ViewSets, declare the exposed action explicitly:
+
+```python
+from djgent import drf_tool
+from rest_framework.response import Response
+from rest_framework.viewsets import ViewSet
+
+@drf_tool(
+    name="book_detail_api",
+    description="Fetch one book through the DRF API.",
+    method="GET",
+    path="/api/books/{pk}/",
+    action="retrieve",
+)
+class BookViewSet(ViewSet):
+    def retrieve(self, request, pk=None):
+        return Response({"id": pk})
+```
+
+The generated tool executes the DRF view in-process using DRF request tooling;
+it does not make an HTTP call or require a running server. Tool arguments are
+generic: `query_params`, `data`, and `path_kwargs`. Only the declared
+method/action is exposed, and non-read methods default to approval-required
+high-risk tools unless overridden.
 
 ### ModelQueryTool Class
 

@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Global memory defaults through `DJGENT["MEMORY_ENABLED"]` and
+  `DJGENT["MEMORY_BACKEND"]` for `Agent.create()`.
+- DRF view tool documentation and demo support, including the featured books
+  API example.
+- Tests for memory settings defaults, memory override behavior, and mounted
+  chat URL generation.
+
+### Changed
+- `Agent.create()` now reads memory and memory backend defaults from settings
+  when those arguments are omitted.
+- Example project configuration now uses database-backed memory by default.
+- Package dependencies now include OpenAI LangChain and Django REST Framework
+  requirements.
+- README and persistent memory docs now cover settings-backed memory behavior
+  and DRF view tools.
+
+### Fixed
+- Built-in chat detail URLs no longer repeat the `chat/` segment when chat URLs
+  are mounted at `/chat/`.
+- Chat conversation path prefix generation now matches the mounted URL
+  structure.
+
+### Maintenance
+- Formatting cleanup in agent, chat, checks, demo, and test modules.
+- Minor whitespace cleanup in demo tools.
+
 ## [0.3.2] - 2026-04-22
 
 ### Fixed

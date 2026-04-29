@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 from django.contrib.auth import get_user_model
 from django.test import Client
+from django.urls import reverse
 
 from djgent.chat.views import ConfiguredChatView
 from djgent.models import Conversation
@@ -92,8 +93,12 @@ class TestBuiltInChatUi:
         session["djgent_chat_conversation_ids"] = [str(own_conversation.id)]
         session.save()
 
-        own_response = client.get(f"/chat/{own_conversation.id}/")
-        other_response = client.get(f"/chat/{other_conversation.id}/")
+        own_response = client.get(
+            reverse("djgent_chat:detail", args=[own_conversation.id])
+        )
+        other_response = client.get(
+            reverse("djgent_chat:detail", args=[other_conversation.id])
+        )
 
         assert own_response.status_code == 200
         assert other_response.status_code == 404
@@ -124,8 +129,12 @@ class TestBuiltInChatUi:
         client.force_login(current_user)
 
         home_response = client.get("/")
-        own_response = client.get(f"/chat/{own_conversation.id}/")
-        other_response = client.get(f"/chat/{other_conversation.id}/")
+        own_response = client.get(
+            reverse("djgent_chat:detail", args=[own_conversation.id])
+        )
+        other_response = client.get(
+            reverse("djgent_chat:detail", args=[other_conversation.id])
+        )
 
         assert home_response.status_code == 200
         assert b"My conversation" in home_response.content
@@ -152,6 +161,29 @@ class TestBuiltInChatUi:
             ConfiguredChatView().build_agent(request)
 
         assert create.call_args.kwargs["auto_load_tools"] is False
+
+    def test_mounted_chat_detail_url_does_not_repeat_chat_segment(self, settings) -> None:
+        settings.ROOT_URLCONF = "tests.chat_mounted_urls"
+        settings.DJGENT = {
+            "DEFAULT_LLM": "openai:gpt-4o-mini",
+            "API_KEYS": {"OPENAI": "test-key"},
+        }
+        client = Client()
+        conversation = Conversation.objects.create(
+            agent_name="djgent-chat",
+            name="Mounted conversation",
+        )
+        session = client.session
+        session["djgent_chat_conversation_ids"] = [str(conversation.id)]
+        session.save()
+
+        detail_url = reverse("djgent_chat:detail", args=[conversation.id])
+        response = client.get("/chat/")
+
+        assert detail_url == f"/chat/{conversation.id}/"
+        assert response.status_code == 200
+        assert f'href="/chat/{conversation.id}/"'.encode() in response.content
+        assert b'conversationPathPrefix: "/chat/"' in response.content
 
 
 @pytest.mark.django_db

@@ -43,7 +43,7 @@ class BaseChatView(ABC):
     embed_url_name = "embed"
     message_url_name = "message"
     new_conversation_url_name = "new"
-    conversation_path_segment = "chat/"
+    conversation_path_segment = ""
     page_title = "Djgent Chat"
     chat_title = "Djgent Chat"
     chat_subtitle = "A built-in chat surface for Djgent agents with persistent conversations."
@@ -136,7 +136,9 @@ class BaseChatView(ABC):
         return self.session_key
 
     def get_route_name(self, request, url_name: str) -> str:
-        namespace = getattr(getattr(request, "resolver_match", None), "namespace", "")
+        namespace = getattr(
+            getattr(request, "resolver_match", None), "namespace", ""
+        )
         return f"{namespace}:{url_name}" if namespace else url_name
 
     def get_home_url(self, request) -> str:
@@ -149,9 +151,13 @@ class BaseChatView(ABC):
         return reverse(self.get_route_name(request, self.message_url_name))
 
     def get_new_conversation_url(self, request) -> str:
-        return reverse(self.get_route_name(request, self.new_conversation_url_name))
+        return reverse(
+            self.get_route_name(request, self.new_conversation_url_name)
+        )
 
-    def get_conversation_path_prefix(self, request, *, embed: bool = False) -> str:
+    def get_conversation_path_prefix(
+        self, request, *, embed: bool = False
+    ) -> str:
         if embed:
             return self.get_embed_url(request)
         return f"{self.get_home_url(request)}{self.conversation_path_segment}"
@@ -163,7 +169,9 @@ class BaseChatView(ABC):
     def get_provider_status(self) -> dict[str, Any]:
         djgent_settings = getattr(settings, "DJGENT", {}) or {}
         provider_string = djgent_settings.get("DEFAULT_LLM", "")
-        provider = provider_string.split(":", 1)[0].lower() if provider_string else ""
+        provider = (
+            provider_string.split(":", 1)[0].lower() if provider_string else ""
+        )
         api_keys = djgent_settings.get("API_KEYS", {}) or {}
 
         if provider == "ollama":
@@ -171,7 +179,8 @@ class BaseChatView(ABC):
                 "provider": provider_string,
                 "configured": True,
                 "message": (
-                    "Configured for Ollama. Make sure the Ollama server is " "running locally."
+                    "Configured for Ollama. Make sure the Ollama server is "
+                    "running locally."
                 ),
             }
 
@@ -206,7 +215,9 @@ class BaseChatView(ABC):
     def get_session_conversation_ids(self, request) -> list[str]:
         return list(request.session.get(self.get_session_key(), []))
 
-    def save_session_conversation_ids(self, request, conversation_ids: list[str]) -> None:
+    def save_session_conversation_ids(
+        self, request, conversation_ids: list[str]
+    ) -> None:
         request.session[self.get_session_key()] = conversation_ids
         request.session.modified = True
 
@@ -221,9 +232,9 @@ class BaseChatView(ABC):
 
     def get_conversation_queryset(self, request) -> models.QuerySet:
         user = self.get_active_user(request)
-        queryset = Conversation.objects.filter(agent_name=self.get_agent_name()).order_by(
-            "-updated_at"
-        )
+        queryset = Conversation.objects.filter(
+            agent_name=self.get_agent_name()
+        ).order_by("-updated_at")
 
         if user:
             return queryset.filter(user=user)
@@ -233,13 +244,21 @@ class BaseChatView(ABC):
             return queryset.none()
         return queryset.filter(user__isnull=True, id__in=conversation_ids)
 
-    def get_conversation_or_404(self, request, conversation_id: str) -> Conversation:
-        conversation = self.get_conversation_queryset(request).filter(id=conversation_id).first()
+    def get_conversation_or_404(
+        self, request, conversation_id: str
+    ) -> Conversation:
+        conversation = (
+            self.get_conversation_queryset(request)
+            .filter(id=conversation_id)
+            .first()
+        )
         if not conversation:
             raise Http404("Conversation not found.")
         return conversation
 
-    def serialize_conversation(self, conversation: Conversation) -> dict[str, Any]:
+    def serialize_conversation(
+        self, conversation: Conversation
+    ) -> dict[str, Any]:
         last_message = conversation.messages.order_by("-created_at").first()
         return {
             "id": str(conversation.id),
@@ -253,7 +272,9 @@ class BaseChatView(ABC):
             ),
         }
 
-    def serialize_messages(self, conversation: Optional[Conversation]) -> list[dict[str, Any]]:
+    def serialize_messages(
+        self, conversation: Optional[Conversation]
+    ) -> list[dict[str, Any]]:
         if not conversation:
             return []
 
@@ -268,14 +289,19 @@ class BaseChatView(ABC):
         ]
 
     @abstractmethod
-    def build_agent(self, request, conversation_id: Optional[str] = None) -> Agent:
+    def build_agent(
+        self, request, conversation_id: Optional[str] = None
+    ) -> Agent:
         """Return an Agent instance for handling chat messages."""
 
-    def maybe_name_conversation(self, conversation: Conversation, prompt: str) -> None:
+    def maybe_name_conversation(
+        self, conversation: Conversation, prompt: str
+    ) -> None:
         if conversation.name:
             return
         conversation.name = (
-            prompt.strip()[: self.default_conversation_name_length] or "Untitled chat"
+            prompt.strip()[: self.default_conversation_name_length]
+            or "Untitled chat"
         )
         conversation.save(update_fields=["name", "updated_at"])
 
@@ -288,11 +314,15 @@ class BaseChatView(ABC):
     ) -> dict[str, Any]:
         selected_conversation = None
         if conversation_id:
-            selected_conversation = self.get_conversation_or_404(request, conversation_id)
+            selected_conversation = self.get_conversation_or_404(
+                request, conversation_id
+            )
 
         conversations = [
             self.serialize_conversation(item)
-            for item in self.get_conversation_queryset(request)[: self.max_sidebar_conversations]
+            for item in self.get_conversation_queryset(request)[
+                : self.max_sidebar_conversations
+            ]
         ]
         tools = self.get_tool_names()
 
@@ -314,19 +344,25 @@ class BaseChatView(ABC):
             "chat_api_url": self.get_message_url(request),
             "new_chat_url": self.get_new_conversation_url(request),
             "chat_base_url": self.get_home_url(request),
-            "conversation_path_prefix": self.get_conversation_path_prefix(request, embed=embed),
+            "conversation_path_prefix": self.get_conversation_path_prefix(
+                request, embed=embed
+            ),
             "history_updates_enabled": not embed,
             "is_embed": embed,
         }
 
-    def render_page(self, request, conversation_id: Optional[str] = None) -> Any:
+    def render_page(
+        self, request, conversation_id: Optional[str] = None
+    ) -> Any:
         return render(
             request,
             self.get_template_name(),
             self.get_page_context(request, conversation_id=conversation_id),
         )
 
-    def render_embed(self, request, conversation_id: Optional[str] = None) -> Any:
+    def render_embed(
+        self, request, conversation_id: Optional[str] = None
+    ) -> Any:
         return render(
             request,
             self.get_embed_template_name(),
@@ -344,7 +380,9 @@ class BaseChatView(ABC):
             conversation_ids.clear()
             self.save_session_conversation_ids(request, conversation_ids)
 
-        return JsonResponse({"ok": True, "redirect_url": self.get_home_url(request)})
+        return JsonResponse(
+            {"ok": True, "redirect_url": self.get_home_url(request)}
+        )
 
     def post_message(self, request) -> JsonResponse:
         provider_status = self.get_provider_status()
@@ -394,7 +432,9 @@ class BaseChatView(ABC):
 
         conversations = [
             self.serialize_conversation(item)
-            for item in self.get_conversation_queryset(request)[: self.max_sidebar_conversations]
+            for item in self.get_conversation_queryset(request)[
+                : self.max_sidebar_conversations
+            ]
         ]
 
         return JsonResponse(
@@ -422,16 +462,30 @@ class ConfiguredChatView(BaseChatView):
             "page_title": chat_settings.get("PAGE_TITLE", title),
             "title": title,
             "subtitle": chat_settings.get("SUBTITLE", self.chat_subtitle),
-            "system_prompt": chat_settings.get("SYSTEM_PROMPT", BaseChatView.system_prompt),
+            "system_prompt": chat_settings.get(
+                "SYSTEM_PROMPT", BaseChatView.system_prompt
+            ),
             "tools": list(chat_settings.get("TOOLS", self.tools)),
-            "auto_load_tools": chat_settings.get("AUTO_LOAD_TOOLS", self.auto_load_tools),
-            "welcome_message": chat_settings.get("WELCOME_MESSAGE", self.welcome_message),
-            "input_placeholder": chat_settings.get("INPUT_PLACEHOLDER", self.input_placeholder),
+            "auto_load_tools": chat_settings.get(
+                "AUTO_LOAD_TOOLS", self.auto_load_tools
+            ),
+            "welcome_message": chat_settings.get(
+                "WELCOME_MESSAGE", self.welcome_message
+            ),
+            "input_placeholder": chat_settings.get(
+                "INPUT_PLACEHOLDER", self.input_placeholder
+            ),
             "bubble_enabled": chat_settings.get("BUBBLE_ENABLED", False),
             "bubble_title": chat_settings.get("BUBBLE_TITLE", "Ask Djgent"),
-            "bubble_label": chat_settings.get("BUBBLE_LABEL", "Open Djgent chat"),
-            "bubble_position": chat_settings.get("BUBBLE_POSITION", "bottom-right"),
-            "bubble_panel_width": chat_settings.get("BUBBLE_PANEL_WIDTH", "420px"),
+            "bubble_label": chat_settings.get(
+                "BUBBLE_LABEL", "Open Djgent chat"
+            ),
+            "bubble_position": chat_settings.get(
+                "BUBBLE_POSITION", "bottom-right"
+            ),
+            "bubble_panel_width": chat_settings.get(
+                "BUBBLE_PANEL_WIDTH", "420px"
+            ),
             "bubble_panel_mobile_height": chat_settings.get(
                 "BUBBLE_PANEL_MOBILE_HEIGHT",
                 "78vh",
@@ -465,7 +519,9 @@ class ConfiguredChatView(BaseChatView):
     def get_system_prompt(self) -> str:
         return self.get_settings()["system_prompt"]
 
-    def build_agent(self, request, conversation_id: Optional[str] = None) -> Agent:
+    def build_agent(
+        self, request, conversation_id: Optional[str] = None
+    ) -> Agent:
         return Agent.create(
             name=self.get_agent_name(),
             tools=self.get_tool_names(),
@@ -479,7 +535,21 @@ class ConfiguredChatView(BaseChatView):
         )
 
 
-chat_home = ConfiguredChatView.page_view()
-chat_embed = ConfiguredChatView.embed_view()
-new_conversation = ConfiguredChatView.new_conversation_view()
-chat_message = ConfiguredChatView.message_view()
+def chat_home(request, conversation_id: Optional[str] = None):
+    return ConfiguredChatView().render_page(
+        request, conversation_id=conversation_id
+    )
+
+
+@xframe_options_sameorigin
+def chat_embed(request, conversation_id: Optional[str]=None):
+    return ConfiguredChatView().render_page(request, conversation_id=conversation_id)
+
+@require_POST
+def new_conversation(request):
+    return ConfiguredChatView().reset_conversation(request)
+
+
+@require_POST
+def chat_message(request):
+    return ConfiguredChatView().post_message(request)

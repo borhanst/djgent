@@ -9,6 +9,7 @@ class TestCustomChatView(BaseChatView):
     embed_url_name = "embed"
     message_url_name = "message"
     new_conversation_url_name = "new"
+    conversation_path_segment = "chat/"
     agent_name = "custom-chat"
     page_title = "Custom Chat"
     chat_title = "Custom Chat"

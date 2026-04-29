@@ -85,6 +85,7 @@ DJGENT = {
     "BUILTIN_TOOLS": ["calculator", "datetime"],
     "AUTO_DISCOVER_TOOLS": True,
     "MEMORY_ENABLED": True,
+    "MEMORY_BACKEND": "database",
     "CHAT_UI": {
         "BUBBLE_ENABLED": True,
         "BUBBLE_TITLE": "Ask Djgent",

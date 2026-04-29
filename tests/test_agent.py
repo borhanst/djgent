@@ -8,6 +8,7 @@ import pytest
 from langchain_core.messages import HumanMessage, AIMessage
 
 from djgent.agents.base import Agent
+from djgent.memory.backends import DatabaseMemory, InMemoryMemory
 
 
 @pytest.mark.django_db
@@ -62,6 +63,74 @@ class TestAgent:
         agent = Agent(llm=mock_llm, **agent_kwargs)
         
         assert len(agent.tools) > 0
+
+    def test_create_uses_settings_memory_backend_by_default(
+        self, settings, mock_llm: MagicMock
+    ) -> None:
+        """Test Agent.create uses DJGENT MEMORY_BACKEND when omitted."""
+        settings.DJGENT = {
+            "DEFAULT_LLM": "openai:gpt-4o-mini",
+            "MEMORY_BACKEND": "database",
+        }
+
+        with patch("djgent.agents.base.get_llm", return_value=mock_llm):
+            agent = Agent.create(name="settings-memory")
+
+        assert agent.memory is True
+        assert agent.memory_backend_type == "database"
+        assert isinstance(agent._memory_backend, DatabaseMemory)
+
+    def test_create_memory_backend_argument_overrides_settings(
+        self, settings, mock_llm: MagicMock
+    ) -> None:
+        """Test explicit memory_backend wins over DJGENT MEMORY_BACKEND."""
+        settings.DJGENT = {
+            "DEFAULT_LLM": "openai:gpt-4o-mini",
+            "MEMORY_BACKEND": "database",
+        }
+
+        with patch("djgent.agents.base.get_llm", return_value=mock_llm):
+            agent = Agent.create(
+                name="explicit-memory",
+                memory_backend="memory",
+            )
+
+        assert agent.memory is True
+        assert agent.memory_backend_type == "memory"
+        assert isinstance(agent._memory_backend, InMemoryMemory)
+
+    def test_create_uses_settings_memory_enabled_by_default(
+        self, settings, mock_llm: MagicMock
+    ) -> None:
+        """Test Agent.create uses DJGENT MEMORY_ENABLED when omitted."""
+        settings.DJGENT = {
+            "DEFAULT_LLM": "openai:gpt-4o-mini",
+            "MEMORY_ENABLED": False,
+            "MEMORY_BACKEND": "database",
+        }
+
+        with patch("djgent.agents.base.get_llm", return_value=mock_llm):
+            agent = Agent.create(name="memory-disabled")
+
+        assert agent.memory is False
+        assert agent._memory_backend is None
+
+    def test_create_memory_argument_overrides_settings(
+        self, settings, mock_llm: MagicMock
+    ) -> None:
+        """Test explicit memory=True wins over DJGENT MEMORY_ENABLED."""
+        settings.DJGENT = {
+            "DEFAULT_LLM": "openai:gpt-4o-mini",
+            "MEMORY_ENABLED": False,
+            "MEMORY_BACKEND": "database",
+        }
+
+        with patch("djgent.agents.base.get_llm", return_value=mock_llm):
+            agent = Agent.create(name="memory-enabled", memory=True)
+
+        assert agent.memory is True
+        assert agent.memory_backend_type == "database"
+        assert isinstance(agent._memory_backend, DatabaseMemory)
 
 
 @pytest.mark.django_db
