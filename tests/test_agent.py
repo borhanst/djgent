@@ -41,15 +41,17 @@ class TestAgent:
             Agent()
 
     def test_agent_run_returns_response(
-        self, 
-        agent_kwargs: dict, 
-        mock_llm: MagicMock
+        self,
+        settings,
+        agent_kwargs: dict,
+        mock_llm: MagicMock,
     ) -> None:
         """Test agent run method returns a response."""
+        settings.DJGENT = {"CHECKPOINTER": None}
         agent = Agent(llm=mock_llm, **agent_kwargs)
-        
+
         response = agent.run("Hello")
-        
+
         assert response is not None
         assert isinstance(response, str)
 

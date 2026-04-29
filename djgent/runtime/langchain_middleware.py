@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from djgent.exceptions import ConfigurationError
 from djgent.utils.helpers import merge_settings
@@ -89,11 +89,10 @@ def has_enabled_langchain_middleware(
 def build_langchain_middleware(
     *,
     config: Optional[Dict[str, Any]] = None,
-) -> Tuple[List[Any], Optional[Any]]:
+) -> List[Any]:
     """Build LangChain built-in middleware instances from Djgent config."""
     resolved = resolve_langchain_middleware_config(config)
     instances: List[Any] = []
-    checkpointer = resolved.get("checkpointer")
 
     hitl_specs = _normalize_specs(resolved.get("human_in_the_loop"))
     if hitl_specs:
@@ -110,4 +109,4 @@ def build_langchain_middleware(
         for spec in specs:
             instances.append(middleware_class(**spec))
 
-    return instances, checkpointer
+    return instances

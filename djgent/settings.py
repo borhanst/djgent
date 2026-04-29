@@ -10,6 +10,7 @@ DJGENT_DEFAULTS = {
     "AUTO_DISCOVER_TOOLS": True,
     "MEMORY_ENABLED": True,
     "MEMORY_BACKEND": "memory",
+    "CHECKPOINTER": "auto",
     "MAX_ITERATIONS": 10,
     "MODEL_QUERY_TOOL": {
         "ENABLED": True,

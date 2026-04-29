@@ -1,6 +1,7 @@
 """Runtime primitives for Djgent."""
 
 from djgent.runtime.approvals import ApprovalRequiredError
+from djgent.runtime.checkpointer import resolve_checkpointer
 from djgent.runtime.langchain_middleware import (
     build_langchain_middleware,
     has_enabled_langchain_middleware,
@@ -42,6 +43,7 @@ __all__ = [
     "RateLimitConfig",
     "RateLimitMiddleware",
     "RateLimitState",
+    "resolve_checkpointer",
     "resolve_langchain_middleware_config",
     "StateStore",
     "StreamEvent",

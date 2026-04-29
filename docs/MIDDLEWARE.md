@@ -216,6 +216,10 @@ Djgent merges `langchain_middleware` from:
 1. `DJGENT["LANGCHAIN_MIDDLEWARE"]` in Django settings
 2. per-agent `langchain_middleware` overrides
 
+`LANGCHAIN_MIDDLEWARE` is only for LangChain middleware sections. Configure
+LangGraph checkpointing separately with `DJGENT["CHECKPOINTER"]` or the
+per-agent `checkpointer=` argument.
+
 If you configure `human_in_the_loop`, Djgent currently raises a configuration error because that flow is not wired into the runtime yet.
 
 ## Tips

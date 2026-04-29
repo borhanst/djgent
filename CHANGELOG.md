@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Global memory defaults through `DJGENT["MEMORY_ENABLED"]` and
   `DJGENT["MEMORY_BACKEND"]` for `Agent.create()`.
+- Automatic LangGraph checkpointer configuration through
+  `DJGENT["CHECKPOINTER"]`, using PostgreSQL when Django uses PostgreSQL and
+  SQLite otherwise.
 - DRF view tool documentation and demo support, including the featured books
   API example.
 - Tests for memory settings defaults, memory override behavior, and mounted
@@ -21,8 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Example project configuration now uses database-backed memory by default.
 - Package dependencies now include OpenAI LangChain and Django REST Framework
   requirements.
+- Package dependencies now include LangGraph SQLite and PostgreSQL checkpoint
+  savers.
 - README and persistent memory docs now cover settings-backed memory behavior
   and DRF view tools.
+- LangChain middleware settings now stay separate from checkpointer
+  configuration.
 
 ### Fixed
 - Built-in chat detail URLs no longer repeat the `chat/` segment when chat URLs

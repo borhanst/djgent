@@ -109,6 +109,7 @@ def agent_kwargs() -> dict:
     return {
         "name": "test_agent",
         "memory": False,
+        "checkpointer": False,
         "system_prompt": "You are a helpful assistant.",
     }
 

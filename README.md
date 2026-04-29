@@ -129,6 +129,7 @@ DJGENT = {
     "AUTO_DISCOVER_TOOLS": True,
     "MEMORY_ENABLED": True,
     "MEMORY_BACKEND": "memory",  # Use "database" for persistent conversations
+    "CHECKPOINTER": "auto",  # Use Postgres when Django does, otherwise SQLite
 }
 ```
 
@@ -443,6 +444,40 @@ python manage.py djgent_clear_conversations --days=30
 
 See [docs/PERSISTENT_MEMORY.md](docs/PERSISTENT_MEMORY.md) for full documentation.
 
+### Automatic LangGraph Checkpointing
+
+Djgent automatically configures a LangGraph checkpointer by default:
+
+```python
+DJGENT = {
+    "CHECKPOINTER": "auto",
+}
+```
+
+`"auto"` uses `settings.DATABASES["default"]`: PostgreSQL projects get a
+Postgres checkpointer, and SQLite or other database engines use a dedicated
+SQLite checkpoint file. To disable automatic checkpointing:
+
+```python
+DJGENT = {
+    "CHECKPOINTER": None,
+}
+```
+
+To provide your own saver:
+
+```python
+from langgraph.checkpoint.memory import MemorySaver
+
+DJGENT = {
+    "CHECKPOINTER": MemorySaver(),
+}
+```
+
+Per-agent `checkpointer=` still overrides the setting. Keep `thread_id` stable
+when resuming the same durable execution thread. Pass `checkpointer=False` for
+a single direct `Agent(...)` instance when you need to bypass checkpointing.
+
 ### Runtime Middleware
 
 Djgent always includes three runtime middleware components by default:
@@ -510,7 +545,9 @@ message = agent.run("Delete record 42")
 print(message)
 ```
 
-You can also enable LangChain's built-in middleware through `langchain_middleware`:
+You can also enable LangChain's built-in middleware through `langchain_middleware`.
+Checkpointing is configured separately through `DJGENT["CHECKPOINTER"]` or
+per-agent `checkpointer=`:
 
 ```python
 agent = Agent.create(
@@ -745,7 +782,7 @@ agent = Agent.create(
     response_schema: type = None, # Optional structured output schema
     mcp_servers: dict = None,     # Optional MCP server definitions
     langchain_middleware: dict = None,  # LangChain built-in middleware config
-    checkpointer: Any = None,     # Optional LangGraph/LangChain checkpointer
+    checkpointer: Any = None,     # Override DJGENT["CHECKPOINTER"]
     thread_id: str = None,        # Override durable thread identifier
 )
 

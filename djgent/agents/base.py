@@ -41,6 +41,7 @@ from djgent.runtime import (
     StateStore,
     ToolApprovalMiddleware,
     build_langchain_middleware,
+    resolve_checkpointer,
     resolve_langchain_middleware_config,
 )
 from djgent.runtime.mcp import load_mcp_tools
@@ -157,12 +158,12 @@ class Agent:
         self,
     ) -> tuple[List[Any], Optional[Any]]:
         """Build LangChain built-in middleware and checkpointer options."""
-        middleware, configured_checkpointer = build_langchain_middleware(
+        middleware = build_langchain_middleware(
             config=self._langchain_middleware_config,
         )
         return (
             middleware,
-            self._langchain_checkpointer or configured_checkpointer,
+            resolve_checkpointer(self._langchain_checkpointer),
         )
 
     def _init_memory_backend(
