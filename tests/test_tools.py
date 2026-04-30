@@ -229,6 +229,61 @@ class TestToolRegistry:
         tool_instance = ToolRegistry.get_tool_instance("legacy_decorated_function")
         assert tool_instance.run() == "legacy"
 
+    def test_function_tool_langchain_schema_uses_original_signature(
+        self, isolated_tool_registry
+    ) -> None:
+        """Test @tool functions expose their real parameters to LangChain."""
+
+        @tool(name="schema_greeting")
+        def greet(name: str, excited: bool = False) -> str:
+            """Greet a person."""
+            greeting = f"Hello, {name}"
+            return f"{greeting}!" if excited else greeting
+
+        lc_tool = greet.to_langchain()
+
+        assert set(lc_tool.args) == {"name", "excited"}
+        assert "args" not in lc_tool.args
+        assert "kwargs" not in lc_tool.args
+
+    def test_variadic_function_tool_accepts_positional_args(
+        self, isolated_tool_registry
+    ) -> None:
+        """Test @tool functions with *args accept positional arguments."""
+
+        @tool(name="add_positional_numbers")
+        def add_number(*args: int) -> int:
+            """Add numbers together."""
+            return sum(args)
+
+        assert add_number.run(1, 2, 3) == 6
+
+    def test_variadic_function_tool_accepts_args_keyword(
+        self, isolated_tool_registry
+    ) -> None:
+        """Test @tool functions with *args accept LangChain-style args keyword."""
+
+        @tool(name="add_keyword_numbers")
+        def add_number(*args: int) -> int:
+            """Add numbers together."""
+            return sum(args)
+
+        assert add_number.run(args=[1, 2, 3]) == 6
+
+    def test_variadic_function_tool_langchain_invoke_accepts_args(
+        self, isolated_tool_registry
+    ) -> None:
+        """Test LangChain invokes @tool variadic functions with args arrays."""
+
+        @tool(name="add_langchain_numbers")
+        def add_number(*args: int) -> int:
+            """Add numbers together."""
+            return sum(args)
+
+        lc_tool = add_number.to_langchain()
+
+        assert lc_tool.invoke({"args": [1, 2, 3]}) == 6
+
 
 class TestRetrievalTool:
     """Test cases for RetrievalTool."""

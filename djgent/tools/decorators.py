@@ -1,6 +1,8 @@
 """Decorators for creating tools easily."""
 
-from typing import Any, Callable, Optional, Type, Union
+import inspect
+from functools import wraps
+from typing import Any, Callable, Dict, Optional, Tuple, Type, Union
 
 from djgent.tools.base import Tool
 
@@ -12,12 +14,70 @@ class _FunctionTool(Tool):
         self, func: Callable, name: Optional[str] = None, description: Optional[str] = None
     ):
         self._func = func
+        self._signature = inspect.signature(func)
         self.name = name or func.__name__
         self.description = description or (func.__doc__ or "").strip().split("\n")[0]
         super().__init__()
 
+    def _normalize_variadic_args(
+        self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
+    ) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
+        var_positional = next(
+            (
+                param
+                for param in self._signature.parameters.values()
+                if param.kind is inspect.Parameter.VAR_POSITIONAL
+            ),
+            None,
+        )
+        if var_positional is None or var_positional.name not in kwargs:
+            return args, kwargs
+
+        normalized_kwargs = dict(kwargs)
+        variadic_values = normalized_kwargs.pop(var_positional.name)
+        if isinstance(variadic_values, (list, tuple)):
+            normalized_args = (*args, *variadic_values)
+        else:
+            normalized_args = (*args, variadic_values)
+        return normalized_args, normalized_kwargs
+
     def _run(self, *args: Any, **kwargs: Any) -> Any:
-        return self._func(*args, **kwargs)
+        normalized_args, normalized_kwargs = self._normalize_variadic_args(args, kwargs)
+        return self._func(*normalized_args, **normalized_kwargs)
+
+    def to_langchain(
+        self,
+        *,
+        before_tool: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+        after_tool: Optional[Callable[[str, Any], Any]] = None,
+    ):
+        """Convert function-based tools using the original function signature."""
+        from langchain_core.tools import StructuredTool
+
+        @wraps(self._func)
+        def wrapped(*args: Any, **kwargs: Any) -> Any:
+            normalized_args, normalized_kwargs = self._normalize_variadic_args(args, kwargs)
+            bound = self._signature.bind_partial(*normalized_args, **normalized_kwargs)
+            arguments = dict(bound.arguments)
+
+            if before_tool:
+                before_tool(self.name, arguments)
+
+            result = self._func(*normalized_args, **normalized_kwargs)
+
+            if after_tool:
+                result = after_tool(self.name, result)
+
+            return result
+
+        wrapped.__signature__ = self._signature  # type: ignore[attr-defined]
+
+        return StructuredTool.from_function(
+            func=wrapped,
+            name=self.name,
+            description=self.description,
+            args_schema=self.args_schema,
+        )
 
 
 def tool(

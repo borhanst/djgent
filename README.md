@@ -773,7 +773,16 @@ def my_tool(arg1: str, arg2: int = 10) -> str:
 def another_tool(value: str) -> str:
     """Full docstring can be multi-line."""
     return value.upper()
+
+@tool
+def add_number(*args: int) -> int:
+    """Add numbers together."""
+    return sum(args)
 ```
+
+Function tools can use standard named parameters or variadic `*args`. When an
+LLM tool call provides variadic values as `{"args": [1, 2, 3]}`, Djgent passes
+them to the function as positional arguments.
 
 ### Tool Class
 
