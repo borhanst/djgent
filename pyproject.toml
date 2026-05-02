@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "djgent"
-version = "0.4.0"
+version = "0.4.1"
 description = "Django AI Agent Framework - Build AI agents with LangChain integration in Django"
 readme = "PYPI_README.md"
 license = "MIT"
@@ -32,7 +32,7 @@ keywords = [
     "chatbot",
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Framework :: Django",
     "Framework :: Django :: 5.2",
     "Framework :: Django :: 6.0",
