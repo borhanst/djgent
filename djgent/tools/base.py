@@ -59,6 +59,7 @@ class Tool(ABC):
     args_schema: Optional[dict] = None
     risk_level: str = "low"
     requires_approval: bool = False
+    requires_human_interaction: bool = False
     approval_reason: str = ""
 
     def __init__(self, **kwargs: Any):
@@ -158,11 +159,29 @@ class Tool(ABC):
 
     def get_tool_config(self) -> Dict[str, Any]:
         """Return metadata used by middleware and approval workflows."""
+        hitl = bool(
+            getattr(self, "requires_human_interaction", False)
+            or getattr(self, "requires_approval", False)
+        )
         return {
             "name": self.name,
             "risk_level": getattr(self, "risk_level", "low"),
-            "requires_approval": bool(getattr(self, "requires_approval", False)),
+            "requires_approval": hitl,
+            "requires_human_interaction": hitl,
             "reason": getattr(self, "approval_reason", ""),
+        }
+
+    def get_review_context(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Return safe review context for human interaction requests.
+
+        Override this method to provide custom review context.
+        The default implementation returns operation name and reason only.
+        Do NOT include sensitive payload data in the review context.
+        """
+        return {
+            "operation_name": self.name,
+            "reason": getattr(self, "approval_reason", "")
+            or f"Tool '{self.name}' requires human review.",
         }
 
     def to_langchain(

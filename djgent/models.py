@@ -1,9 +1,13 @@
 """Django models for djgent conversation history."""
 
+import json
+import secrets
 import uuid
+from datetime import datetime
 from decimal import Decimal
 
 from django.conf import settings
+from django.core import signing
 from django.db import models
 from django.utils import timezone
 
@@ -337,27 +341,75 @@ class AuditLog(models.Model):
 
 
 class HumanInteractionRequest(models.Model):
-    """Pending site-owner review for LangChain human-in-the-loop interrupts."""
+    """First-class review request for protected agent operations."""
 
     STATUS_PENDING = "pending"
     STATUS_APPROVED = "approved"
     STATUS_REJECTED = "rejected"
+    STATUS_RESUMING = "resuming"
     STATUS_RESUMED = "resumed"
-    STATUS_FAILED = "failed"
+    STATUS_RESUME_FAILED = "resume_failed"
+    STATUS_EXPIRED = "expired"
+    STATUS_CANCELLED = "cancelled"
 
     STATUS_CHOICES = [
         (STATUS_PENDING, "Pending"),
         (STATUS_APPROVED, "Approved"),
         (STATUS_REJECTED, "Rejected"),
+        (STATUS_RESUMING, "Resuming"),
         (STATUS_RESUMED, "Resumed"),
-        (STATUS_FAILED, "Failed"),
+        (STATUS_RESUME_FAILED, "Resume Failed"),
+        (STATUS_EXPIRED, "Expired"),
+        (STATUS_CANCELLED, "Cancelled"),
     ]
 
+    SOURCE_DJGENT_NATIVE = "djgent_native"
+    SOURCE_LANGGRAPH_HITL = "langgraph_hitl"
+
+    SOURCE_CHOICES = [
+        (SOURCE_DJGENT_NATIVE, "Djgent Native"),
+        (SOURCE_LANGGRAPH_HITL, "LangGraph HITL"),
+    ]
+
+    OPERATION_TYPE_TOOL = "tool"
+    OPERATION_TYPE_OPERATION = "operation"
+
+    OPERATION_TYPE_CHOICES = [
+        (OPERATION_TYPE_TOOL, "Tool"),
+        (OPERATION_TYPE_OPERATION, "Operation"),
+    ]
+
+    DECISION_APPROVE = "approve"
+    DECISION_REJECT = "reject"
+    DECISION_EDIT = "edit"
+    DECISION_CANCEL = "cancel"
+
+    DECISION_CHOICES = [
+        (DECISION_APPROVE, "Approve"),
+        (DECISION_REJECT, "Reject"),
+        (DECISION_EDIT, "Edit"),
+        (DECISION_CANCEL, "Cancel"),
+    ]
+
+    DECIDABLE_STATUSES = (STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED)
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    public_reference = models.CharField(
+        max_length=32,
+        unique=True,
+        db_index=True,
+        blank=True,
+    )
     status = models.CharField(
         max_length=32,
         choices=STATUS_CHOICES,
         default=STATUS_PENDING,
+        db_index=True,
+    )
+    source = models.CharField(
+        max_length=32,
+        choices=SOURCE_CHOICES,
+        default=SOURCE_DJGENT_NATIVE,
         db_index=True,
     )
     agent_name = models.CharField(max_length=255, db_index=True)
@@ -376,6 +428,31 @@ class HumanInteractionRequest(models.Model):
         on_delete=models.SET_NULL,
         related_name="djgent_human_interaction_requests",
     )
+    operation_name = models.CharField(max_length=255, blank=True, default="")
+    operation_type = models.CharField(
+        max_length=32,
+        choices=OPERATION_TYPE_CHOICES,
+        default=OPERATION_TYPE_TOOL,
+    )
+    review_context = models.JSONField(default=dict, blank=True)
+    review_instructions = models.TextField(blank=True, default="")
+    review_permission = models.CharField(max_length=255, blank=True, default="")
+    expires_at = models.DateTimeField(null=True, blank=True)
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reviewed_hitl_requests",
+    )
+    reviewer_notes = models.TextField(blank=True, default="")
+    notes_visible_to_user = models.BooleanField(default=False)
+    decision = models.CharField(
+        max_length=32,
+        choices=DECISION_CHOICES,
+        blank=True,
+        default="",
+    )
     site_owner_emails = models.JSONField(default=list, blank=True)
     action_requests = models.JSONField(default=list, blank=True)
     review_configs = models.JSONField(default=list, blank=True)
@@ -383,6 +460,10 @@ class HumanInteractionRequest(models.Model):
     output = models.TextField(blank=True, default="")
     error = models.TextField(blank=True, default="")
     notification_error = models.TextField(blank=True, default="")
+    resume_payload_encrypted = models.BinaryField(null=True, blank=True)
+    resume_payload_key_version = models.CharField(
+        max_length=32, blank=True, default=""
+    )
     emailed_at = models.DateTimeField(null=True, blank=True)
     decided_at = models.DateTimeField(null=True, blank=True)
     resumed_at = models.DateTimeField(null=True, blank=True)
@@ -396,10 +477,63 @@ class HumanInteractionRequest(models.Model):
             models.Index(fields=["status", "-created_at"]),
             models.Index(fields=["agent_name", "status"]),
             models.Index(fields=["thread_id", "status"]),
+            models.Index(fields=["source", "status", "-created_at"]),
         ]
 
     def __str__(self) -> str:
-        return f"{self.agent_name}:{self.thread_id}:{self.status}"
+        ref = self.public_reference or str(self.id)[:8]
+        return f"{ref}:{self.status}"
+
+    def save(self, *args, **kwargs):
+        if not self.public_reference:
+            self.public_reference = self._generate_public_reference()
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def _generate_public_reference(cls) -> str:
+        """Generate a unique public reference like HITL-20260515-A1B2C3D4."""
+        date_part = datetime.now().strftime("%Y%m%d")
+        while True:
+            token = secrets.token_hex(4).upper()
+            ref = f"HITL-{date_part}-{token}"
+            if not cls.objects.filter(public_reference=ref).exists():
+                return ref
+
+    def get_payload_encryption_key(self) -> str:
+        """Return the key used for resume payload encryption."""
+        from djgent.utils.helpers import get_djent_setting
+
+        key = get_djent_setting("HUMAN_IN_THE_LOOP", {}).get("PAYLOAD_KEY")
+        return key or settings.SECRET_KEY
+
+    def set_resume_payload(self, data: dict) -> None:
+        """Encrypt and store the resume payload."""
+        key = self.get_payload_encryption_key()
+        signed = signing.dumps(data, key=key, salt="djgent-hitl-resume")
+        self.resume_payload_encrypted = signed.encode("utf-8")
+        self.save(update_fields=[
+            "resume_payload_encrypted", "resume_payload_key_version", "updated_at"
+        ])
+
+    def get_resume_payload(self) -> dict | None:
+        """Decrypt and return the resume payload."""
+        if not self.resume_payload_encrypted:
+            return None
+        key = self.get_payload_encryption_key()
+        try:
+            raw = self.resume_payload_encrypted.decode("utf-8")
+            return signing.loads(raw, key=key, salt="djgent-hitl-resume")
+        except (signing.BadSignature, signing.SignatureExpired):
+            return None
+
+    def clear_resume_payload(self) -> None:
+        """Clear the encrypted resume payload after successful resume."""
+        self.resume_payload_encrypted = None
+        self.save(update_fields=["resume_payload_encrypted", "updated_at"])
+
+    def is_decidable(self) -> bool:
+        """Return True if this request can be decided by a reviewer."""
+        return self.status in self.DECIDABLE_STATUSES
 
 
 class LangGraphCheckpoint(models.Model):

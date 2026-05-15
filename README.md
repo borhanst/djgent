@@ -24,6 +24,7 @@
 - 🧩 **RAG Agent Context (Coming Soon)** - Automatically inject retrieved knowledge into agent prompts
 - 🔌 **MCP Integration** - Load tools from MCP servers when adapters are installed
 - 🔍 **Auto-Discovery** - Automatically discover and register tools from Django apps
+- 🛡️ **Human-in-the-Loop** - First-class protected operations with admin review, notifications, and resume
 - ✅ **System Checks** - Built-in Django system checks for configuration validation
 - 🗄️ **Model Query Tools** - Easy database querying with `ModelQueryTool` base class
 - 💾 **Persistent Storage** - Django models for conversation history with admin interface
@@ -41,6 +42,7 @@ Core guides:
 - [Model Query Tool](docs/MODEL_QUERY_TOOL.md) - Building safe model-backed tools
 - [Multi Agent](docs/MULTI_AGENT.md) - Coordinating multiple specialized agents
 - [Middleware](docs/MIDDLEWARE.md) - Runtime middleware, approvals, and LangChain middleware config
+- [Human-in-the-Loop](docs/HUMAN_IN_THE_LOOP.md) - Protected operations, reviewer workflow, and admin review
 - [MCP](docs/MCP.md) - Loading tools from MCP servers
 
 ## Installation
@@ -591,8 +593,45 @@ agent = Agent.create(
 )
 ```
 
-Human-in-the-loop can pause selected tool calls, save the pending review in the
-database, email site owners, and resume after approval:
+Human-in-the-loop can pause protected tool calls, create a Human Interaction
+Request, notify configured reviewers, and resume after a decision. Protect tools
+via tool metadata or settings policy:
+
+```python
+# Via tool metadata
+class SendEmailTool(Tool):
+    name = "send_email"
+    requires_human_interaction = True
+    approval_reason = "Email requires owner approval."
+
+# Via settings policy (no code changes needed)
+DJGENT = {
+    "MEMORY_BACKEND": "database",  # Required for HITL
+    "HUMAN_IN_THE_LOOP": {
+        "REVIEWER_POLICY": {
+            "mode": "admin",
+            "site_owner_emails": ["owner@example.com"],
+        },
+        "site_owner_emails": ["owner@example.com"],
+        "PROTECTED_TOOLS": {
+            "send_email": {"reason": "Email requires owner approval."},
+            "deploy_code": {"reason": "Deploy requires approval.", "review_permission": "can_deploy"},
+        },
+    },
+}
+```
+
+Reviewers decide requests in Django admin (one at a time). Decisions: approve
+(execute), reject (skip), edit (modify and execute), or cancel.
+
+```python
+# Programmatic resume after admin review
+result = agent.resume_human_interaction(request_id)
+```
+
+See [docs/HUMAN_IN_THE_LOOP.md](docs/HUMAN_IN_THE_LOOP.md) for the full guide.
+
+LangChain's built-in human-in-the-loop middleware can also be used:
 
 ```python
 DJGENT = {
@@ -605,24 +644,12 @@ DJGENT = {
                     "allowed_decisions": ["approve", "reject"],
                     "description": "Deleting records requires owner approval.",
                 },
-                "send_email": {
-                    "allowed_decisions": ["approve", "edit", "reject"],
-                },
             },
-            "description_prefix": "Tool execution pending site owner approval",
-            "notify_email": True,
-            "site_url": "https://example.com",
+            "site_owner_emails": ["owner@example.com"],
         }
     },
 }
-
-agent.resume_human_interaction(request_id)
 ```
-
-Pending requests are visible in Django admin under Djgent human interaction
-requests. Owner notification recipients resolve from
-`human_in_the_loop.site_owner_emails`, then `DJGENT["SITE_OWNER_EMAILS"]`, then
-Django `ADMINS`.
 
 See [docs/MIDDLEWARE.md](docs/MIDDLEWARE.md) for the full guide.
 
@@ -1173,6 +1200,16 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 5. Open a Pull Request
 
 ## Changelog
+
+### Unreleased
+
+- First-class Human Interaction Request model with encrypted Resume Payload and Public Request Reference
+- Protected tool workflow via `requires_human_interaction` flag or settings-based tool protection
+- Django admin Review Surface with per-request decision, permission enforcement, and reviewer notes
+- Djgent-native resume flow: approve/reject/edit/cancel with decision locking
+- LangGraph HITL requests routed through shared reviewer flow
+- Django system checks for missing reviewer policy, missing durable persistence, and disabled HITL
+- Human-in-the-loop documentation
 
 ### 0.3.0 (2026-04-20)
 - Initial PyPI release of djgent

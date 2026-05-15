@@ -119,21 +119,25 @@ def notify_site_owners(request: Any, hitl_config: Optional[Dict[str, Any]] = Non
 
     site_url = str(config.get("site_url") or "")
     url = notification_url(request.id, site_url=site_url)
+    ref = request.public_reference or str(request.id)
     action_lines = []
     for action in request.action_requests:
         name = action.get("name") or action.get("tool") or "unknown"
-        args = action.get("arguments", action.get("args", {}))
-        action_lines.append(f"- {name}: {args}")
+        # Only include safe summary, not full arguments
+        description = action.get("description", "")
+        if description:
+            action_lines.append(f"- {name}: {description}")
+        else:
+            action_lines.append(f"- {name}")
     body = "\n".join(
         [
             "Djgent tool execution requires site owner review.",
             "",
-            f"Request: {request.id}",
+            f"Reference: {ref}",
             f"Agent: {request.agent_name}",
-            f"Thread: {request.thread_id}",
             "",
-            "Actions:",
-            "\n".join(action_lines) or "- No action details provided",
+            "Operations:",
+            "\n".join(action_lines) or "- No operation details provided",
             "",
             f"Review: {url}",
         ]

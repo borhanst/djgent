@@ -290,6 +290,60 @@ class OutputGuardrailMiddleware(AgentMiddleware):
         return fallback
 
 
+class HumanInteractionMiddleware(AgentMiddleware):
+    """Intercept tools that require first-class human interaction review."""
+
+    def before_tool(
+        self,
+        execution: ExecutionContext,
+        tool_name: str,
+        arguments: Dict[str, Any],
+    ) -> None:
+        from djgent.runtime.approvals import HumanInteractionRequiredError
+
+        # Skip if tool is already approved
+        approved_tools = execution.context.get("approved_tools", {})
+        if tool_name in approved_tools:
+            return
+        skiplist = execution.context.setdefault("approval_skiplist", set())
+        if tool_name in skiplist:
+            return
+
+        # Check settings-based protected tools first
+        protected_tools = execution.context.get("protected_tools", {})
+        tool_config = protected_tools.get(tool_name)
+
+        # If not in settings, check if the tool itself is flagged
+        if tool_config is None:
+            risky = execution.context.get("risky_tools", {})
+            tool_config = risky.get(tool_name)
+            if tool_config and not tool_config.get("requires_human_interaction"):
+                tool_config = None
+
+        if tool_config is None:
+            return
+
+        # Check if tool has a custom get_review_context
+        review_context = tool_config.get("review_context", {})
+        review_instructions = tool_config.get("review_instructions", "")
+        review_permission = tool_config.get("review_permission", "")
+
+        reason = (
+            tool_config.get("reason")
+            or f"Tool '{tool_name}' requires human review."
+        )
+
+        raise HumanInteractionRequiredError(
+            tool_name=tool_name,
+            arguments=arguments,
+            reason=reason,
+            thread_id=execution.thread_id,
+            review_context=review_context,
+            review_instructions=review_instructions,
+            review_permission=review_permission,
+        )
+
+
 def apply_before_run(
     middleware: Iterable[AgentMiddleware], execution: ExecutionContext
 ) -> None:

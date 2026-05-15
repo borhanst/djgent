@@ -38,6 +38,8 @@ from djgent.runtime import (
     DjangoCheckpointSaver,
     DynamicPromptMiddleware,
     ExecutionContext,
+    HumanInteractionMiddleware,
+    HumanInteractionRequiredError,
     OutputGuardrailMiddleware,
     StateStore,
     ToolApprovalMiddleware,
@@ -138,6 +140,7 @@ class Agent:
             [
                 DynamicPromptMiddleware(),
                 ToolApprovalMiddleware(),
+                HumanInteractionMiddleware(),
                 OutputGuardrailMiddleware(),
             ]
         )
@@ -273,6 +276,7 @@ class Agent:
         if user is not None and getattr(user, "is_authenticated", False):
             execution.metadata["user_id"] = getattr(user, "id", None)
         execution.context.setdefault("risky_tools", self._risky_tool_map())
+        execution.context.setdefault("protected_tools", self._protected_tools_from_settings())
         execution.context.setdefault(
             "approved_tools", durable_state.values.get("approved_tools", {})
         )
@@ -285,8 +289,42 @@ class Agent:
             if isinstance(tool, Tool):
                 config = tool.get_tool_config()
                 if config.get("requires_approval"):
+                    # Include review context from the tool if available
+                    if config.get("requires_human_interaction"):
+                        try:
+                            config["review_context"] = tool.get_review_context({})
+                        except Exception:
+                            config["review_context"] = {}
                     data[config["name"]] = config
         return data
+
+    def _protected_tools_from_settings(self) -> Dict[str, Dict[str, Any]]:
+        """Return settings-based protected tool policies."""
+        from djgent.utils.helpers import get_djent_setting
+
+        hitl_config = get_djent_setting("HUMAN_IN_THE_LOOP", {})
+        policies = hitl_config.get("PROTECTED_TOOLS", {})
+        result: Dict[str, Dict[str, Any]] = {}
+        for tool_name, policy in policies.items():
+            if isinstance(policy, dict):
+                result[tool_name] = {
+                    "name": tool_name,
+                    "requires_human_interaction": True,
+                    "reason": policy.get("reason", ""),
+                    "review_context": policy.get("review_context", {}),
+                    "review_instructions": policy.get("review_instructions", ""),
+                    "review_permission": policy.get("review_permission", ""),
+                }
+            elif policy is True:
+                result[tool_name] = {
+                    "name": tool_name,
+                    "requires_human_interaction": True,
+                    "reason": f"Tool '{tool_name}' is protected by settings policy.",
+                    "review_context": {},
+                    "review_instructions": "",
+                    "review_permission": "",
+                }
+        return result
 
     def _build_messages(
         self, input: str, execution: ExecutionContext
@@ -724,7 +762,8 @@ class Agent:
         execution: ExecutionContext,
         interrupt_payload: Dict[str, Any],
     ) -> Any:
-        """Persist a HITL request and notify configured site owners."""
+        """Persist a LangGraph HITL request and notify configured site owners."""
+        from djgent.models import HumanInteractionRequest
         from djgent.runtime.human import (
             human_in_the_loop_config,
             persist_human_interaction_request,
@@ -732,7 +771,7 @@ class Agent:
 
         conversation = getattr(self._memory_backend, "conversation", None)
         requesting_user = getattr(self._memory_backend, "user", None)
-        return persist_human_interaction_request(
+        request = persist_human_interaction_request(
             agent_name=self.name,
             thread_id=execution.thread_id,
             conversation=conversation,
@@ -743,6 +782,94 @@ class Agent:
             action_requests=list(interrupt_payload.get("action_requests") or []),
             review_configs=list(interrupt_payload.get("review_configs") or []),
         )
+
+        # Set first-class fields for LangGraph HITL requests
+        action_requests = list(interrupt_payload.get("action_requests") or [])
+        operation_name = ""
+        if action_requests:
+            operation_name = action_requests[0].get("name", "")
+
+        request.source = HumanInteractionRequest.SOURCE_LANGGRAPH_HITL
+        request.operation_name = operation_name
+        request.operation_type = HumanInteractionRequest.OPERATION_TYPE_TOOL
+        request.review_context = {
+            "operation_name": operation_name,
+            "action_count": len(action_requests),
+        }
+        request.set_resume_payload({
+            "action_requests": action_requests,
+            "review_configs": list(interrupt_payload.get("review_configs") or []),
+        })
+        request.save(update_fields=[
+            "source", "operation_name", "operation_type",
+            "review_context",
+            "resume_payload_encrypted", "resume_payload_key_version",
+            "updated_at",
+        ])
+
+        return request
+
+    def _create_djgent_native_hitl_request(
+        self,
+        execution: ExecutionContext,
+        error: HumanInteractionRequiredError,
+    ) -> Any:
+        """Create a Djgent-native HITL request from a protected tool interception."""
+        from djgent.runtime.human import (
+            human_in_the_loop_config,
+            persist_human_interaction_request,
+        )
+
+        conversation = getattr(self._memory_backend, "conversation", None)
+        requesting_user = getattr(self._memory_backend, "user", None)
+
+        action_requests = [
+            {
+                "name": error.tool_name,
+                "arguments": error.arguments,
+                "description": error.reason,
+            }
+        ]
+        review_configs = [
+            {
+                "action_name": error.tool_name,
+                "allowed_decisions": ["approve", "edit", "reject"],
+            }
+        ]
+
+        request = persist_human_interaction_request(
+            agent_name=self.name,
+            thread_id=execution.thread_id,
+            conversation=conversation,
+            requesting_user=requesting_user,
+            hitl_config=human_in_the_loop_config(
+                self._langchain_middleware_config
+            ),
+            action_requests=action_requests,
+            review_configs=review_configs,
+        )
+
+        # Set first-class fields
+        request.source = request.SOURCE_DJGENT_NATIVE
+        request.operation_name = error.tool_name
+        request.operation_type = request.OPERATION_TYPE_TOOL
+        request.review_context = error.review_context or {
+            "operation_name": error.tool_name,
+            "reason": error.reason,
+        }
+        request.review_instructions = error.review_instructions
+        request.review_permission = error.review_permission
+        request.set_resume_payload({
+            "tool_name": error.tool_name,
+            "arguments": error.arguments,
+        })
+        request.save(update_fields=[
+            "source", "operation_name", "operation_type",
+            "review_context", "review_instructions", "review_permission",
+            "resume_payload_encrypted", "resume_payload_key_version", "updated_at",
+        ])
+
+        return request
 
     def _execute(
         self,
@@ -825,6 +952,40 @@ class Agent:
             )
             self._persist_execution_state(execution, output=output)
             execution.emit("run.end", output=output)
+        except HumanInteractionRequiredError as exc:
+            request = self._create_djgent_native_hitl_request(
+                execution, exc
+            )
+            output = (
+                "Tool execution is waiting for site owner approval. "
+                f"Request: {request.public_reference}"
+            )
+            self._persist_human_interaction_state(
+                execution,
+                output=output,
+                request_id=str(request.id),
+            )
+            self._persist_failed_run(
+                input,
+                output,
+                role="system",
+                thread_id=execution.thread_id,
+            )
+            execution.emit(
+                "run.human_interaction_required",
+                request_id=str(request.id),
+                public_reference=request.public_reference,
+                tool=exc.tool_name,
+            )
+            result = AgentResult(
+                output=output,
+                messages=messages,
+                structured_response=None,
+                state=execution.state,
+                events=execution.events,
+            )
+            self._last_result = result
+            return result
         except ApprovalRequiredError as exc:
             self._persist_execution_state(
                 execution, output=exc.request.reason, approval_error=exc
@@ -1014,10 +1175,31 @@ class Agent:
         decisions: Optional[List[Dict[str, Any]]] = None,
         reviewer: Optional[Any] = None,
     ) -> AgentResult:
-        """Resume a LangChain HITL request after site owner review."""
+        """Resume a HITL request after site owner review.
+
+        Validates the resume payload, attempts to resume the paused operation,
+        and handles success (clear payload, emit signal) or failure (resume_failed).
+        """
         from django.utils import timezone
 
         from djgent.models import HumanInteractionRequest, Message
+
+        request = HumanInteractionRequest.objects.get(id=request_id)
+
+        # Validate request is in a decidable state
+        if not request.is_decidable():
+            raise AgentError(
+                f"Request {request.public_reference} is not in a decidable state "
+                f"(current: {request.status})."
+            )
+
+        # Validate resume payload exists for native requests
+        if request.source == HumanInteractionRequest.SOURCE_DJGENT_NATIVE:
+            resume_payload = request.get_resume_payload()
+            if not resume_payload:
+                raise AgentError(
+                    f"Request {request.public_reference} has no resume payload."
+                )
 
         try:
             from langgraph.types import Command
@@ -1026,7 +1208,6 @@ class Agent:
                 "Resuming human interaction requires langgraph.types.Command."
             ) from exc
 
-        request = HumanInteractionRequest.objects.get(id=request_id)
         try:
             resolved_decisions = normalize_decisions(
                 list(request.action_requests or []),
@@ -1037,36 +1218,47 @@ class Agent:
 
         request.decisions = resolved_decisions
         request.decided_at = timezone.now()
+        request.reviewer = reviewer or request.reviewer
         request.status = (
             HumanInteractionRequest.STATUS_REJECTED
             if resolved_decisions
             and all(item.get("type") == "reject" for item in resolved_decisions)
             else HumanInteractionRequest.STATUS_APPROVED
         )
-        request.save(update_fields=["decisions", "decided_at", "status", "updated_at"])
+        request.save(update_fields=[
+            "decisions", "decided_at", "reviewer", "status", "updated_at",
+        ])
 
         self._initialize_memory_for_run()
         execution = self._build_execution_context("", thread_id=request.thread_id)
-        langchain_middleware, checkpointer = self._build_langchain_runtime()
-        lc_tools = self._prepare_langchain_tools(execution)
 
-        from langchain.agents import create_agent
-
-        create_kwargs: Dict[str, Any] = {"model": self.llm, "tools": lc_tools}
-        if langchain_middleware:
-            create_kwargs["middleware"] = langchain_middleware
-        if checkpointer is not None:
-            create_kwargs["checkpointer"] = checkpointer
-        if self.response_schema is not None:
-            create_kwargs["response_format"] = self.response_schema
-
-        agent = create_agent(**create_kwargs)
-        config = {"configurable": {"thread_id": request.thread_id}}
-        command = Command(resume={"decisions": resolved_decisions})
         try:
-            raw_result = agent.invoke(command, config=config, version="v2")
-        except TypeError:
-            raw_result = agent.invoke(command, config=config)
+            langchain_middleware, checkpointer = self._build_langchain_runtime()
+            lc_tools = self._prepare_langchain_tools(execution)
+
+            from langchain.agents import create_agent
+
+            create_kwargs: Dict[str, Any] = {"model": self.llm, "tools": lc_tools}
+            if langchain_middleware:
+                create_kwargs["middleware"] = langchain_middleware
+            if checkpointer is not None:
+                create_kwargs["checkpointer"] = checkpointer
+            if self.response_schema is not None:
+                create_kwargs["response_format"] = self.response_schema
+
+            agent = create_agent(**create_kwargs)
+            config = {"configurable": {"thread_id": request.thread_id}}
+            command = Command(resume={"decisions": resolved_decisions})
+            try:
+                raw_result = agent.invoke(command, config=config, version="v2")
+            except TypeError:
+                raw_result = agent.invoke(command, config=config)
+        except Exception as exc:
+            # Handle resume failure
+            request.status = HumanInteractionRequest.STATUS_RESUME_FAILED
+            request.error = str(exc)
+            request.save(update_fields=["status", "error", "updated_at"])
+            raise AgentError(f"Resume failed for {request.public_reference}: {exc}") from exc
 
         interrupt_payload = extract_interrupt_payload(raw_result)
         if interrupt_payload:
@@ -1075,7 +1267,7 @@ class Agent:
             )
             output = (
                 "Tool execution is waiting for site owner approval. "
-                f"Request: {next_request.id}"
+                f"Request: {next_request.public_reference}"
             )
             self._persist_human_interaction_state(
                 execution,
@@ -1096,10 +1288,17 @@ class Agent:
             raw_result
         )
         output = apply_after_run(self._middleware, execution, output)
+
+        # Success: update request, clear resume payload, emit signal
         request.output = str(output)
         request.resumed_at = timezone.now()
         request.status = HumanInteractionRequest.STATUS_RESUMED
-        request.save(update_fields=["output", "resumed_at", "status", "updated_at"])
+        request.clear_resume_payload()
+        request.save(update_fields=[
+            "output", "resumed_at", "status",
+            "resume_payload_encrypted", "resume_payload_key_version",
+            "updated_at",
+        ])
 
         state = self._state_store.load(request.thread_id)
         state.status = "completed"
@@ -1131,6 +1330,7 @@ class Agent:
         execution.emit(
             "run.human_interaction_resumed",
             request_id=str(request.id),
+            public_reference=request.public_reference,
             status=request.status,
         )
         result = AgentResult(

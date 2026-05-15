@@ -1,6 +1,6 @@
 """Runtime primitives for Djgent."""
 
-from djgent.runtime.approvals import ApprovalRequiredError
+from djgent.runtime.approvals import ApprovalRequiredError, HumanInteractionRequiredError
 from djgent.runtime.checkpoint import DjangoCheckpointSaver
 from djgent.runtime.human import (
     extract_interrupt_payload,
@@ -17,6 +17,7 @@ from djgent.runtime.middleware import (
     AuditMiddleware,
     DynamicPromptMiddleware,
     ExecutionContext,
+    HumanInteractionMiddleware,
     OutputGuardrailMiddleware,
     ToolApprovalMiddleware,
 )
@@ -43,6 +44,8 @@ __all__ = [
     "DjangoCheckpointSaver",
     "DynamicPromptMiddleware",
     "ExecutionContext",
+    "HumanInteractionMiddleware",
+    "HumanInteractionRequiredError",
     "OutputGuardrailMiddleware",
     "build_langchain_middleware",
     "has_enabled_langchain_middleware",
